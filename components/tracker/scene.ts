@@ -16,10 +16,17 @@ export function initScene(
   const scn = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(50, 2, 0.1, 50000);
 
+  // Root group — rotates the whole scene so the orbital plane lies flat in XZ
+  // Orbital plane normal (from trajectory PCA): (-0.17, 0.52, -0.84)
+  const sceneRoot = new THREE.Group();
+  const orbitalNormal = new THREE.Vector3(-0.1703, 0.5232, -0.8350).normalize();
+  sceneRoot.quaternion.setFromUnitVectors(orbitalNormal, new THREE.Vector3(0, 1, 0));
+  scn.add(sceneRoot);
+
   // Lighting
-  scn.add(new THREE.AmbientLight(0x2a3040, 0.6));
+  sceneRoot.add(new THREE.AmbientLight(0x2a3040, 0.6));
   const sunL = new THREE.DirectionalLight(0xfff5e0, 2.0);
-  scn.add(sunL);
+  sceneRoot.add(sunL);
   objRef.current.sunLight = sunL;
 
   // Sun — positioned correctly each frame via render loop
@@ -28,7 +35,7 @@ export function initScene(
     new THREE.SphereGeometry(sunR, 32, 32),
     new THREE.MeshBasicMaterial({ color: 0xffffee }),
   );
-  scn.add(sunMesh);
+  sceneRoot.add(sunMesh);
   objRef.current.sun = sunMesh;
 
   // Stars — circular dot texture so they don't render as squares
@@ -71,7 +78,7 @@ export function initScene(
 
   // Atmosphere
   ([1.05, 1.1, 1.18] as const).forEach((s, i) => earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * s, 48, 48), new THREE.MeshBasicMaterial({ color: [0x4499ff, 0x3377dd, 0x2255aa][i], transparent: true, opacity: [0.07, 0.035, 0.015][i], side: THREE.BackSide }))));
-  scn.add(earthGroup);
+  sceneRoot.add(earthGroup);
 
   // Moon
   const moonTexLoader = new THREE.TextureLoader();
@@ -79,16 +86,16 @@ export function initScene(
   moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
   moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.015; moonMat.needsUpdate = true; });
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
-  scn.add(moon); objRef.current.moon = moon;
+  sceneRoot.add(moon); objRef.current.moon = moon;
 
   // Trajectory
   const tPts = OEM.map(d => new THREE.Vector3(d[1] * KM2U, d[2] * KM2U, d[3] * KM2U));
   fullTrajPts.current = tPts;
   const trajLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts), new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.3 }));
-  scn.add(trajLine); objRef.current.trajLine = trajLine;
+  sceneRoot.add(trajLine); objRef.current.trajLine = trajLine;
 
   const cLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts.slice(0, 2)), new THREE.LineBasicMaterial({ color: 0x66bbff, transparent: true, opacity: 0.8 }));
-  scn.add(cLine); objRef.current.cLine = cLine;
+  sceneRoot.add(cLine); objRef.current.cLine = cLine;
   objRef.current.trajPts = tPts;
 
   // Moon orbit line
@@ -102,7 +109,7 @@ export function initScene(
   }
   const moonOrbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(moonOrbitPts), new THREE.LineDashedMaterial({ color: 0x6688aa, transparent: true, opacity: 0.5, dashSize: 2, gapSize: 1 }));
   moonOrbit.computeLineDistances();
-  scn.add(moonOrbit); objRef.current.moonOrbit = moonOrbit;
+  sceneRoot.add(moonOrbit); objRef.current.moonOrbit = moonOrbit;
 
   // Orion spacecraft
   const orionGroup = new THREE.Group();
@@ -155,12 +162,12 @@ export function initScene(
     wing.rotation.y = -angle;
     orionGroup.add(wing);
   }
-  scn.add(orionGroup);
+  sceneRoot.add(orionGroup);
 
   const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.05 }));
-  scn.add(oGlow);
+  sceneRoot.add(oGlow);
 
-  objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow;
+  objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow; objRef.current.sceneRoot = sceneRoot;
 
   // Resize
   const resize = (): void => { const p = canvas.parentElement; if (!p) return; ren.setSize(p.clientWidth, p.clientHeight); cam.aspect = p.clientWidth / p.clientHeight; cam.updateProjectionMatrix(); };
@@ -177,18 +184,29 @@ export function setupControls(
   camRef: React.MutableRefObject<THREE.PerspectiveCamera | null>,
   updCam: () => void,
 ): () => void {
-  const onD = (e: MouseEvent): void => { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = e.button === 2; ctl.current.lx = e.clientX; ctl.current.ly = e.clientY; };
+  // Mouse controls — turntable camera
+  const onD = (e: MouseEvent): void => {
+    ctl.current.drag = true; ctl.current.manual = true;
+    ctl.current.right = e.button === 2;
+    ctl.current.lx = e.clientX; ctl.current.ly = e.clientY;
+  };
   const onM = (e: MouseEvent): void => {
     const c = ctl.current; if (!c.drag) return;
-    const dx = e.clientX - c.lx, dy = e.clientY - c.ly; c.lx = e.clientX; c.ly = e.clientY;
+    const dx = e.clientX - c.lx, dy = e.clientY - c.ly;
+    c.lx = e.clientX; c.ly = e.clientY;
     if (c.right) {
+      // Right-drag: pan target on the screen plane
       const cam = camRef.current; if (!cam) return;
       const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
-      const rt = new THREE.Vector3().crossVectors(cam.up, fwd).normalize();
+      const rt = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd).normalize();
       const up = new THREE.Vector3().crossVectors(fwd, rt).normalize();
       const sp = c.r * 0.002;
       c.tgt.add(rt.multiplyScalar(dx * sp)).add(up.multiplyScalar(dy * sp));
-    } else { c.theta -= dx * 0.005; c.phi -= dy * 0.005; }
+    } else {
+      // Left-drag: horizontal = rotate around Y, vertical = tilt up/down
+      c.theta -= dx * 0.005;
+      c.phi -= dy * 0.005;
+    }
     updCam();
   };
   const onU = (): void => { ctl.current.drag = false; };
@@ -205,12 +223,28 @@ export function setupControls(
   canvas.addEventListener("wheel", onW, { passive: false });
   canvas.addEventListener("contextmenu", (e: Event) => e.preventDefault());
 
-  canvas.addEventListener("touchstart", (e: TouchEvent) => { e.preventDefault(); if (e.touches.length === 1) { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = false; ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY; } }, { passive: false });
+  // Touch controls — 1-finger orbit, 2-finger pinch zoom
+  canvas.addEventListener("touchstart", (e: TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = false;
+      ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY;
+    }
+  }, { passive: false });
   canvas.addEventListener("touchmove", (e: TouchEvent) => {
     e.preventDefault();
     const c = ctl.current;
-    if (e.touches.length === 1 && c.drag) { c.theta -= (e.touches[0].clientX - c.lx) * 0.005; c.phi -= (e.touches[0].clientY - c.ly) * 0.005; c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY; updCam(); }
-    if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); } c._lp = d; }
+    if (e.touches.length === 1 && c.drag) {
+      c.theta -= (e.touches[0].clientX - c.lx) * 0.005;
+      c.phi -= (e.touches[0].clientY - c.ly) * 0.005;
+      c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY;
+      updCam();
+    }
+    if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (c._lp) { c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); }
+      c._lp = d;
+    }
   }, { passive: false });
   canvas.addEventListener("touchend", () => { ctl.current.drag = false; ctl.current._lp = null; });
 

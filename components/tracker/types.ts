@@ -30,6 +30,7 @@ export interface SceneObjects {
   trajPts?: THREE.Vector3[];
   sun?: THREE.Mesh;
   sunLight?: THREE.DirectionalLight;
+  sceneRoot?: THREE.Group;
 }
 
 export interface CrewMember {

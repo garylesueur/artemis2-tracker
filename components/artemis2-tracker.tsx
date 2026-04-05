@@ -14,7 +14,7 @@ const ArtemisTracker3D: FC = () => {
   const scnRef = useRef<THREE.Scene | null>(null);
   const renRef = useRef<THREE.WebGLRenderer | null>(null);
   const objRef = useRef<SceneObjects>({});
-  const ctl = useRef<OrbitControls>({ drag: false, right: false, manual: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.42, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
+  const ctl = useRef<OrbitControls>({ drag: false, right: false, manual: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.15, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
 
   const [now, setNow] = useState<number>(Date.now());
   const [tOver, setTOver] = useState<number | null>(null);
@@ -68,10 +68,13 @@ const ArtemisTracker3D: FC = () => {
   const updCam = useCallback((): void => {
     const c = ctl.current, cam = camRef.current; if (!cam) return;
     c.r = Math.max(0.3, Math.min(400, c.r));
-    cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
-    // Flip up vector when going past the poles so rotation is smooth
-    const upY = Math.sin(c.phi) >= 0 ? 1 : -1;
-    cam.up.set(0, upY, 0);
+    c.phi = Math.max(0.1, Math.min(Math.PI - 0.1, c.phi));
+    cam.position.set(
+      c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta),
+      c.tgt.y + c.r * Math.cos(c.phi),
+      c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta),
+    );
+    cam.up.set(0, 1, 0);
     cam.lookAt(c.tgt);
   }, []);
 
@@ -114,16 +117,17 @@ const ArtemisTracker3D: FC = () => {
     const tick = (): void => {
       raf = requestAnimationFrame(tick);
       const o = objRef.current;
-      if (!o.orion || !scnRef.current || !renRef.current || !camRef.current) return;
+      if (!o.orion || !o.sceneRoot || !scnRef.current || !renRef.current || !camRef.current) return;
 
+      // Positions are in OEM coords — sceneRoot rotates them to align the orbital plane
       o.orion.position.copy(oV);
-      // Orient capsule nose along velocity vector (nose is +Y in the model)
       const up = new THREE.Vector3(0, 1, 0);
-      const quat = new THREE.Quaternion().setFromUnitVectors(up, velDir);
-      o.orion.quaternion.copy(quat);
+      const orientQ = new THREE.Quaternion().setFromUnitVectors(up, velDir);
+      o.orion.quaternion.copy(orientQ);
       o.oGlow!.position.copy(oV);
 
-      const camDist = camRef.current.position.distanceTo(oV);
+      const oWorld = o.orion.getWorldPosition(new THREE.Vector3());
+      const camDist = camRef.current.position.distanceTo(oWorld);
       const orionScale = Math.max(0.15, Math.min(2.5, camDist * 0.012));
       o.orion.scale.setScalar(orionScale);
       o.oGlow!.scale.setScalar(orionScale * 1.2);
@@ -146,35 +150,37 @@ const ArtemisTracker3D: FC = () => {
       const c = ctl.current;
       if (!c.drag && !c.manual) {
         let goalTgt: THREE.Vector3, goalR: number;
+        const earthW = o.earth ? o.earth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+        const moonW = o.moon!.getWorldPosition(new THREE.Vector3());
         if (camMode === "orion") {
-          goalTgt = oV.clone();
+          goalTgt = oWorld.clone();
           goalR = 3;
         } else if (camMode === "moon") {
-          goalTgt = mV.clone();
+          goalTgt = moonW.clone();
           goalR = 6;
-          const away = mV.clone().sub(oV).normalize();
+          const away = moonW.clone().sub(oWorld).normalize();
           const goalTheta = Math.atan2(away.z, away.x);
           const goalPhi = Math.acos(Math.max(-1, Math.min(1, away.y / 1)));
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
         } else if (camMode === "earth") {
-          goalTgt = new THREE.Vector3(-3.1, -10.8, -5.8);
+          goalTgt = earthW.clone();
           goalR = 25;
-          const away = new THREE.Vector3().sub(mV).normalize();
+          const away = earthW.clone().sub(moonW).normalize();
           const goalTheta = Math.atan2(away.z, away.x);
           const goalPhi = Math.acos(Math.max(-1, Math.min(1, away.y / 1)));
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
         } else if (camMode === "flyby") {
-          goalTgt = oV.clone().lerp(mV, 0.5);
-          const halfSpan = oV.distanceTo(mV) * 0.5 + MOON_R;
+          goalTgt = oWorld.clone().lerp(moonW, 0.5);
+          const halfSpan = oWorld.distanceTo(moonW) * 0.5 + MOON_R;
           const cam = camRef.current!;
           const vFov = cam.fov * Math.PI / 360; // half vertical FOV in radians
           const hFov = Math.atan(Math.tan(vFov) * cam.aspect); // half horizontal FOV
           const fov = Math.min(vFov, hFov) * 0.85; // use narrower axis with margin
           goalR = Math.max(3, halfSpan / Math.tan(fov));
         } else {
-          goalTgt = new THREE.Vector3(mV.x * 0.5, mV.y * 0.5, mV.z * 0.5);
+          goalTgt = new THREE.Vector3(moonW.x * 0.5, moonW.y * 0.5, moonW.z * 0.5);
           goalR = 140;
         }
         c.tgt.lerp(goalTgt, 0.06);
@@ -184,9 +190,13 @@ const ArtemisTracker3D: FC = () => {
       // Always update camera position from controls
       const cam = camRef.current;
       if (cam) {
-        cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
-        const upY = Math.sin(c.phi) >= 0 ? 1 : -1;
-        cam.up.set(0, upY, 0);
+        c.phi = Math.max(0.1, Math.min(Math.PI - 0.1, c.phi));
+        cam.position.set(
+          c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta),
+          c.tgt.y + c.r * Math.cos(c.phi),
+          c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta),
+        );
+        cam.up.set(0, 1, 0);
         cam.lookAt(c.tgt);
       }
 
@@ -213,11 +223,15 @@ const ArtemisTracker3D: FC = () => {
         const EARTH_R_U = 6371 * KM2U;
         const MOON_R_U = MOON_R;
         const SUN_R_U = 696000 * KM2U;
+        const earthWorld = o.earth ? o.earth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+        const moonWorld = o.moon ? o.moon.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+        const orionWorld = oWorld;
+        const sunWorld = o.sun ? o.sun.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         const labels: [string, THREE.Vector3, number, string][] = [
-          ["EARTH", new THREE.Vector3(-3.1, -10.8, -5.8), EARTH_R_U, "#4499dd"],
-          ["MOON", mV, MOON_R_U, "#999999"],
-          ["ORION", oV, orionScale * 1.5, "#ffcc22"],
-          ["SUN", sV, SUN_R_U, "#ffdd44"],
+          ["EARTH", earthWorld, EARTH_R_U, "#4499dd"],
+          ["MOON", moonWorld, MOON_R_U, "#999999"],
+          ["ORION", orionWorld, orionScale * 1.5, "#ffcc22"],
+          ["SUN", sunWorld, SUN_R_U, "#ffdd44"],
         ];
         // Ensure label elements exist
         while (container.children.length < labels.length) {
