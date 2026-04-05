@@ -901,12 +901,15 @@ const ArtemisTracker3D: FC = () => {
           const maxSpread = Math.max(oV.length(), mV.length(), oV.distanceTo(mV));
           goalR = Math.max(30, maxSpread * 0.75);
         } else if (camMode === "moon") {
-          const toOrion = oV.clone().sub(mV).normalize();
-          goalTgt = mV.clone().add(toOrion.multiplyScalar(MOON_R * 1.5));
-          goalR = Math.max(3, oV.distanceTo(mV) * 0.15);
+          const moonToOrion = oV.clone().sub(mV);
+          const dist = moonToOrion.length();
+          goalTgt = mV.clone().lerp(oV, 0.3);
+          goalR = Math.max(4, dist * 0.6);
         } else if (camMode === "earth") {
-          goalTgt = new THREE.Vector3(0, 0, 0);
-          goalR = 25;
+          const earthToMoon = mV.clone();
+          const dist = earthToMoon.length();
+          goalTgt = new THREE.Vector3().lerp(mV, 0.25);
+          goalR = Math.max(20, dist * 0.45);
         } else if (camMode === "flyby") {
           goalTgt = new THREE.Vector3((oV.x + mV.x) * 0.5, (oV.y + mV.y) * 0.5, (oV.z + mV.z) * 0.5);
           const flybyDist = oV.distanceTo(mV);
