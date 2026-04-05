@@ -34,6 +34,8 @@ interface SceneObjects {
   oGlow?: THREE.Mesh;
   oLbl?: THREE.Sprite;
   cLine?: THREE.Line;
+  trajLine?: THREE.Line;
+  moonOrbit?: THREE.Line;
   trajPts?: THREE.Vector3[];
 }
 
@@ -637,6 +639,9 @@ const ArtemisTracker3D: FC = () => {
   const [speed, setSpeed] = useState<number>(0);
   const [live, setLive] = useState<boolean>(true);
   const [camMode, setCamMode] = useState<CamMode>("flyby");
+  const [showLabels, setShowLabels] = useState(true);
+  const [showTrajectory, setShowTrajectory] = useState(true);
+  const [showMoonOrbit, setShowMoonOrbit] = useState(false);
 
   const eNow = live ? now : (tOver ?? now);
   const met = eNow - LAUNCH_UTC;
@@ -754,11 +759,24 @@ const ArtemisTracker3D: FC = () => {
     // Trajectory
     const tPts = OEM.map(d => new THREE.Vector3(d[1] * KM2U, d[2] * KM2U, d[3] * KM2U));
     fullTrajPts.current = tPts;
-    scn.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts), new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.3 })));
+    const trajLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts), new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.3 }));
+    scn.add(trajLine); objRef.current.trajLine = trajLine;
 
     const cLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts.slice(0, 2)), new THREE.LineBasicMaterial({ color: 0x66bbff, transparent: true, opacity: 0.8 }));
     scn.add(cLine); objRef.current.cLine = cLine;
     objRef.current.trajPts = tPts;
+
+    // Moon orbit line
+    const moonOrbitPts: THREE.Vector3[] = [];
+    const orbitStart = LAUNCH_UTC;
+    const orbitPeriod = 27.3 * 86400000;
+    for (let i = 0; i <= 128; i++) {
+      const t = orbitStart + (i / 128) * orbitPeriod;
+      const mp = getMoonPosKm(t);
+      moonOrbitPts.push(new THREE.Vector3(mp.x * KM2U, mp.y * KM2U, mp.z * KM2U));
+    }
+    const moonOrbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(moonOrbitPts), new THREE.LineBasicMaterial({ color: 0x555566, transparent: true, opacity: 0.25 }));
+    scn.add(moonOrbit); objRef.current.moonOrbit = moonOrbit;
 
     // Orion spacecraft
     const orionGroup = new THREE.Group();
@@ -877,14 +895,18 @@ const ArtemisTracker3D: FC = () => {
       o.oGlow!.scale.setScalar(orionScale * 1.2);
       o.oLbl!.position.set(oV.x, oV.y + orionScale * 2, oV.z);
       o.oLbl!.scale.setScalar(Math.max(0.4, orionScale * 0.6));
+      o.oLbl!.visible = showLabels && camDist > 15;
 
       o.moon!.position.copy(mV);
       o.moonLbl!.position.set(mV.x, mV.y - MOON_R - 1.5, mV.z);
 
       const camR = ctl.current.r;
-      const showBodyLabels = camR > 60;
+      const showBodyLabels = showLabels && camR > 60;
       if (o.earthLbl) o.earthLbl.visible = showBodyLabels;
       if (o.moonLbl) o.moonLbl.visible = showBodyLabels;
+      if (o.trajLine) o.trajLine.visible = showTrajectory;
+      if (o.cLine) o.cLine.visible = showTrajectory;
+      if (o.moonOrbit) o.moonOrbit.visible = showMoonOrbit;
 
       // Smooth zoom lerp
       const zc = ctl.current;
@@ -955,7 +977,7 @@ const ArtemisTracker3D: FC = () => {
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [oV, mV, clampedTime, mf, camMode, eNow]);
+  }, [oV, mV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit]);
 
   const [selectedCrew, setSelectedCrew] = useState<string | null>(null);
 
@@ -1019,6 +1041,14 @@ const ArtemisTracker3D: FC = () => {
               style={{ display: "flex", alignItems: "center", gap: 8, background: camMode === v.id ? "rgba(234,179,8,.15)" : "rgba(3,6,16,.75)", backdropFilter: "blur(8px)", border: camMode === v.id ? "1px solid rgba(234,179,8,.35)" : "1px solid rgba(255,255,255,.12)", color: camMode === v.id ? "#eab308" : "#8a9bb2", borderRadius: 6, padding: "7px 12px", fontSize: 11, fontFamily: "inherit", letterSpacing: ".5px", textAlign: "left" as const, width: 155, transition: "all .2s ease" }}>
               <span style={{ fontSize: 15, lineHeight: 1 }}>{v.icon}</span>
               <span>{v.label}</span>
+            </button>
+          ))}
+          <div style={{ height: 1, background: "rgba(255,255,255,.08)", margin: "4px 0" }} />
+          {([{ label: "LABELS", on: showLabels, fn: () => setShowLabels(v => !v) }, { label: "TRAJECTORY", on: showTrajectory, fn: () => setShowTrajectory(v => !v) }, { label: "MOON ORBIT", on: showMoonOrbit, fn: () => setShowMoonOrbit(v => !v) }] as const).map(t => (
+            <button key={t.label} onClick={t.fn}
+              style={{ display: "flex", alignItems: "center", gap: 8, background: t.on ? "rgba(96,165,250,.1)" : "rgba(3,6,16,.75)", backdropFilter: "blur(8px)", border: t.on ? "1px solid rgba(96,165,250,.25)" : "1px solid rgba(255,255,255,.08)", color: t.on ? "#60a5fa" : "#5a6a80", borderRadius: 6, padding: "6px 12px", fontSize: 10, fontFamily: "inherit", letterSpacing: ".5px", textAlign: "left" as const, width: 155, transition: "all .2s ease" }}>
+              <span style={{ fontSize: 10, lineHeight: 1 }}>{t.on ? "●" : "○"}</span>
+              <span>{t.label}</span>
             </button>
           ))}
         </div>
