@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { SceneObjects } from "./types";
 import { OEM, EARTH_R, MOON_R, KM2U, LAUNCH_UTC } from "./data";
 import { getMoonPosKm } from "./ephemeris";
@@ -104,42 +105,58 @@ export function initScene(
 
   // Orion spacecraft
   const orionGroup = new THREE.Group();
-  const cmGeo = new THREE.ConeGeometry(0.28, 0.5, 12);
-  const cmMat = new THREE.MeshPhongMaterial({ color: 0xd4d0c8, specular: 0x444444, shininess: 30 });
-  const cm = new THREE.Mesh(cmGeo, cmMat); cm.rotation.x = Math.PI; cm.position.y = 0.15; orionGroup.add(cm);
 
-  const shieldGeo = new THREE.CircleGeometry(0.28, 16);
-  const shield = new THREE.Mesh(shieldGeo, new THREE.MeshPhongMaterial({ color: 0x2a2520, side: THREE.DoubleSide }));
-  shield.rotation.x = Math.PI / 2; shield.position.y = 0.4; orionGroup.add(shield);
+  // Load NASA STL model for the command module
+  const stlLoader = new STLLoader();
+  stlLoader.load("/orion-capsule.stl", (geometry) => {
+    geometry.computeVertexNormals();
+    geometry.center();
+    const scale = 0.09;
+    geometry.scale(scale, scale, scale);
 
-  const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.6, 16), new THREE.MeshPhongMaterial({ color: 0x8a8475, specular: 0x333333, shininess: 15 }));
-  sm.position.y = -0.2; orionGroup.add(sm);
+    const capsuleMat = new THREE.MeshPhongMaterial({
+      color: 0xf0f0f0, specular: 0xaaaaaa, shininess: 50,
+      flatShading: false,
+    });
+    const capsule = new THREE.Mesh(geometry, capsuleMat);
+    orionGroup.add(capsule);
+  });
 
-  const bandGeo = new THREE.CylinderGeometry(0.265, 0.265, 0.08, 16);
-  const bandMat = new THREE.MeshPhongMaterial({ color: 0x555045 });
-  const b1 = new THREE.Mesh(bandGeo, bandMat); b1.position.y = -0.05; orionGroup.add(b1);
-  const b2 = new THREE.Mesh(bandGeo.clone(), bandMat); b2.position.y = -0.35; orionGroup.add(b2);
+  // European Service Module (procedural — not in STL)
+  const smMat = new THREE.MeshPhongMaterial({ color: 0xf0f0f0, specular: 0xaaaaaa, shininess: 30 });
+  const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.7, 24), smMat);
+  sm.position.y = -0.75; orionGroup.add(sm);
 
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 0.15, 12), new THREE.MeshPhongMaterial({ color: 0x444444, specular: 0x666666, shininess: 40 }));
-  nozzle.position.y = -0.58; orionGroup.add(nozzle);
+  // SM adapter ring
+  const adapter = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.12, 24), new THREE.MeshPhongMaterial({ color: 0xe0e0e0 }));
+  adapter.position.y = -0.35; orionGroup.add(adapter);
 
+  // Engine nozzle
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.14, 0.18, 12), new THREE.MeshPhongMaterial({ color: 0x444444, specular: 0x888888, shininess: 50 }));
+  nozzle.position.y = -1.2; orionGroup.add(nozzle);
+
+  // Solar panels — 4 wings radiating outward from service module in X pattern
   const panelMat = new THREE.MeshPhongMaterial({ color: 0x1a3a7a, emissive: 0x0a1530, specular: 0x4466aa, shininess: 60 });
   const panelDarkMat = new THREE.MeshPhongMaterial({ color: 0x0f2255, emissive: 0x050a18 });
   for (let i = 0; i < 4; i++) {
     const wing = new THREE.Group();
-    wing.add(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.01, 0.22), panelMat));
-    for (let g = -3; g <= 3; g++) { const gl = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.012, 0.22), panelDarkMat); gl.position.x = g * 0.18; wing.add(gl); }
-    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.15, 6), new THREE.MeshPhongMaterial({ color: 0x666666 }));
-    strut.rotation.z = Math.PI / 2; strut.position.x = -0.62; wing.add(strut);
-    wing.position.y = -0.2;
-    wing.rotation.y = (i * Math.PI) / 2;
-    wing.position.x = Math.cos(i * Math.PI / 2) * 0.95;
-    wing.position.z = Math.sin(i * Math.PI / 2) * 0.95;
+    // Panel extends outward (positive X in local space)
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.01, 0.28), panelMat);
+    panel.position.x = 0.8; // offset so inner edge is at origin
+    wing.add(panel);
+    for (let g = 0; g <= 8; g++) { const gl = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.012, 0.28), panelDarkMat); gl.position.x = g * 0.18; wing.add(gl); }
+    // Strut connecting SM body to panel
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.15, 6), new THREE.MeshPhongMaterial({ color: 0x888888 }));
+    strut.rotation.z = Math.PI / 2; strut.position.x = 0.07; wing.add(strut);
+    // Position at SM surface, rotated in X pattern (45° offset)
+    const angle = (i * Math.PI) / 2 + Math.PI / 4;
+    wing.position.set(Math.cos(angle) * 0.32, -0.75, Math.sin(angle) * 0.32);
+    wing.rotation.y = -angle;
     orionGroup.add(wing);
   }
   scn.add(orionGroup);
 
-  const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.1 }));
+  const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.05 }));
   scn.add(oGlow);
 
   objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow;

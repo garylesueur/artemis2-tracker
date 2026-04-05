@@ -32,8 +32,14 @@ const ArtemisTracker3D: FC = () => {
   const clampedTime = Math.max(DATA_START, Math.min(DATA_END, eNow));
 
   const orionKm = interpOEM(clampedTime);
+  const orionKmAhead = interpOEM(clampedTime + 1000);
   const moonKm = getMoonPosKm(eNow);
   const oV = new THREE.Vector3(orionKm.x * KM2U, orionKm.y * KM2U, orionKm.z * KM2U);
+  const velDir = new THREE.Vector3(
+    (orionKmAhead.x - orionKm.x) * KM2U,
+    (orionKmAhead.y - orionKm.y) * KM2U,
+    (orionKmAhead.z - orionKm.z) * KM2U,
+  ).normalize();
   const mV = new THREE.Vector3(moonKm.x * KM2U, moonKm.y * KM2U, moonKm.z * KM2U);
   const dE = Math.sqrt(orionKm.x ** 2 + orionKm.y ** 2 + orionKm.z ** 2);
   const dM = Math.sqrt((orionKm.x - moonKm.x) ** 2 + (orionKm.y - moonKm.y) ** 2 + (orionKm.z - moonKm.z) ** 2);
@@ -59,7 +65,7 @@ const ArtemisTracker3D: FC = () => {
 
   const updCam = useCallback((): void => {
     const c = ctl.current, cam = camRef.current; if (!cam) return;
-    c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
+    c.phi = ((c.phi % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     c.r = Math.max(1.5, Math.min(400, c.r));
     cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
     cam.lookAt(c.tgt);
@@ -91,8 +97,10 @@ const ArtemisTracker3D: FC = () => {
       if (!o.orion || !scnRef.current || !renRef.current || !camRef.current) return;
 
       o.orion.position.copy(oV);
-      o.orion.rotation.y += 0.003;
-      o.orion.rotation.z += 0.001;
+      // Orient capsule nose along velocity vector (nose is +Y in the model)
+      const up = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion().setFromUnitVectors(up, velDir);
+      o.orion.quaternion.copy(quat);
       o.oGlow!.position.copy(oV);
 
       const camDist = camRef.current.position.distanceTo(oV);
@@ -123,10 +131,8 @@ const ArtemisTracker3D: FC = () => {
       if (!c.drag && !c.manual) {
         let goalTgt: THREE.Vector3, goalR: number;
         if (camMode === "orion") {
-          const mid = new THREE.Vector3((oV.x + mV.x) / 3, (oV.y + mV.y) / 3, (oV.z + mV.z) / 3);
-          goalTgt = mid;
-          const maxSpread = Math.max(oV.length(), mV.length(), oV.distanceTo(mV));
-          goalR = Math.max(30, maxSpread * 0.75);
+          goalTgt = oV.clone();
+          goalR = 3;
         } else if (camMode === "moon") {
           goalTgt = mV.clone();
           goalR = 6;
@@ -162,7 +168,7 @@ const ArtemisTracker3D: FC = () => {
       // Always update camera position from controls
       const cam = camRef.current;
       if (cam) {
-        c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
+        c.phi = ((c.phi % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
         cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
         cam.lookAt(c.tgt);
       }
