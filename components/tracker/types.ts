@@ -1,0 +1,50 @@
+import type * as THREE from "three";
+
+export type Vec3 = { x: number; y: number; z: number };
+export type OEMPoint = [number, number, number, number]; // [ms, x_km, y_km, z_km]
+export type CamMode = "full" | "orion" | "moon" | "earth" | "flyby";
+
+export interface OrbitControls {
+  drag: boolean;
+  right: boolean;
+  manual: boolean;
+  lx: number;
+  ly: number;
+  theta: number;
+  phi: number;
+  r: number;
+  rTarget: number;
+  tgt: THREE.Vector3;
+  _lp?: number | null;
+}
+
+export interface SceneObjects {
+  earth?: THREE.Mesh;
+  earthLbl?: THREE.Sprite;
+  clouds?: THREE.Mesh;
+  moon?: THREE.Mesh;
+  moonLbl?: THREE.Sprite;
+  orion?: THREE.Group;
+  oGlow?: THREE.Mesh;
+  oLbl?: THREE.Sprite;
+  cLine?: THREE.Line;
+  trajLine?: THREE.Line;
+  moonOrbit?: THREE.Line;
+  trajPts?: THREE.Vector3[];
+}
+
+export interface CrewMember {
+  n: string;
+  r: string;
+  full: string;
+  title: string;
+  age: number;
+  img: string;
+  rank: string;
+  born: string;
+  flights: number;
+  days: number;
+  evas: number;
+  bio: string;
+  url: string;
+}
