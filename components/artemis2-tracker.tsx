@@ -539,7 +539,8 @@ const MOON_R = 1737 * KM2U;
 function fmtT(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return d > 0 ? `${d}d ${h}h ${m}m ${sec}s` : `${h}h ${m}m ${sec}s`;
+  const hh = String(h).padStart(2, "0"), mm = String(m).padStart(2, "0"), ss = String(sec).padStart(2, "0");
+  return d > 0 ? `${d}d ${hh}h ${mm}m ${ss}s` : `${hh}h ${mm}m ${ss}s`;
 }
 
 function fmtD(km: number): string {
@@ -979,7 +980,7 @@ const ArtemisTracker3D: FC = () => {
     return () => cancelAnimationFrame(raf);
   }, [oV, mV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit]);
 
-  const [selectedCrew, setSelectedCrew] = useState<string | null>(null);
+  const [showCrew, setShowCrew] = useState(false);
 
   const crew = [
     { n: "Wiseman", r: "CDR", full: "Reid Wiseman", title: "Commander", age: 50, img: "/crew/wiseman.jpg", rank: "Captain, U.S. Navy (Ret.)", born: "Baltimore, Maryland", flights: 2, days: 165, evas: 2, bio: "Navy test pilot and engineer. Flew on ISS Expedition 41 in 2014 logging 165 days and two spacewalks. Former NASA Chief Astronaut. Oldest person to travel beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/g-reid-wiseman/" },
@@ -1083,47 +1084,44 @@ const ArtemisTracker3D: FC = () => {
         </div>
         <div className="sc" style={{ flex: 1.5, minWidth: 200 }}>
           <div className="lbl">CREW — ORION &ldquo;INTEGRITY&rdquo;</div>
-          <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <button key={c.n} onClick={() => setSelectedCrew(c.n)} style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8", borderBottom: "1px solid rgba(255,255,255,.15)" }}>{c.n}</span></button>)}</div>
+          <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <button key={c.n} onClick={() => setShowCrew(true)} style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8", borderBottom: "1px solid rgba(255,255,255,.15)" }}>{c.n}</span></button>)}</div>
         </div>
       </div>
 
-      {selectedCrew && (() => {
-        const c = crew.find(m => m.n === selectedCrew)!;
-        return (
-          <div onClick={() => setSelectedCrew(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#0c1220", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, width: 420, maxWidth: "90vw", overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,.6)" }}>
-              <div style={{ display: "flex", gap: 16, padding: 20 }}>
-                <img src={c.img} alt={c.full} style={{ width: 100, height: 133, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 20, fontWeight: 700, color: "#e2e8f0" }}>{c.full}</div>
-                  <div style={{ fontSize: 11, color: "#eab308", letterSpacing: "1px", marginTop: 2 }}>{c.title.toUpperCase()}</div>
-                  <div style={{ fontSize: 11, color: "#7b8da4", marginTop: 4 }}>{c.rank}</div>
-                  <div style={{ fontSize: 11, color: "#7b8da4", marginTop: 2 }}>Born: {c.born}</div>
-                  <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.flights}</div>
-                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>FLIGHTS</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.days}</div>
-                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>DAYS</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.evas}</div>
-                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>EVAS</div>
+      {showCrew && (
+        <div onClick={() => setShowCrew(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12, maxWidth: 880, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+            {crew.map(c => (
+              <div key={c.n} style={{ background: "#0c1220", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, overflow: "hidden", boxShadow: "0 16px 60px rgba(0,0,0,.5)" }}>
+                <div style={{ display: "flex", gap: 14, padding: 16 }}>
+                  <img src={c.img} alt={c.full} style={{ width: 80, height: 107, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 17, fontWeight: 700, color: "#e2e8f0" }}>{c.full}</div>
+                    <div style={{ fontSize: 10, color: "#eab308", letterSpacing: "1px", marginTop: 2 }}>{c.title.toUpperCase()}</div>
+                    <div style={{ fontSize: 10, color: "#7b8da4", marginTop: 3 }}>{c.rank}</div>
+                    <div style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{c.born}</div>
+                    <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                      {[{ v: c.flights, l: "FLIGHTS" }, { v: c.days, l: "DAYS" }, { v: c.evas, l: "EVAS" }].map(s => (
+                        <div key={s.l} style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#60a5fa" }}>{s.v}</div>
+                          <div style={{ fontSize: 8, color: "#7b8da4", letterSpacing: "1px" }}>{s.l}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
+                <div style={{ padding: "0 16px 12px", fontSize: 11, lineHeight: 1.55, color: "#9aa8ba" }}>{c.bio}</div>
+                <div style={{ padding: "0 16px 14px" }}>
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#60a5fa", background: "rgba(96,165,250,.08)", border: "1px solid rgba(96,165,250,.2)", borderRadius: 5, padding: "5px 12px", textDecoration: "none", letterSpacing: ".5px" }}>NASA BIO</a>
+                </div>
               </div>
-              <div style={{ padding: "0 20px 16px", fontSize: 12, lineHeight: 1.6, color: "#9aa8ba" }}>{c.bio}</div>
-              <div style={{ padding: "0 20px 20px", display: "flex", gap: 8 }}>
-                <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", background: "rgba(96,165,250,.08)", border: "1px solid rgba(96,165,250,.2)", borderRadius: 6, padding: "6px 14px", textDecoration: "none", letterSpacing: ".5px" }}>NASA BIO</a>
-                <button onClick={() => setSelectedCrew(null)} style={{ fontSize: 11, color: "#7b8da4", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 6, padding: "6px 14px", marginLeft: "auto", letterSpacing: ".5px" }}>CLOSE</button>
-              </div>
+            ))}
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", paddingTop: 4 }}>
+              <button onClick={() => setShowCrew(false)} style={{ fontSize: 11, color: "#7b8da4", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 6, padding: "8px 24px", letterSpacing: ".5px", fontFamily: "inherit", cursor: "pointer" }}>CLOSE</button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 };
