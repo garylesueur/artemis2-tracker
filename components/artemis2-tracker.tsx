@@ -612,17 +612,7 @@ function makeEarthTex(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
-function makeMoonTex(): THREE.CanvasTexture {
-  const c = document.createElement("canvas"); c.width = 1024; c.height = 512;
-  const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "#8a8a8a"; ctx.fillRect(0, 0, 1024, 512);
-  for (let i = 0; i < 8000; i++) { const v = 90 + Math.random() * 90; ctx.fillStyle = `rgb(${v},${v},${v})`; ctx.fillRect(Math.random() * 1024, Math.random() * 512, 2 + Math.random() * 5, 2 + Math.random() * 5); }
-  [{ x: 300, y: 200, r: 80 }, { x: 500, y: 180, r: 65 }, { x: 420, y: 280, r: 50 }, { x: 200, y: 300, r: 45 }, { x: 650, y: 220, r: 58 }, { x: 350, y: 140, r: 38 }].forEach(m => {
-    const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r); g.addColorStop(0, "rgba(65,65,70,0.7)"); g.addColorStop(1, "rgba(90,90,90,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2); ctx.fill();
-  });
-  for (let i = 0; i < 50; i++) { const cx = Math.random() * 1024, cy = Math.random() * 512, r = 2 + Math.random() * 20; ctx.strokeStyle = `rgba(50,50,50,${0.25 + Math.random() * 0.3})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = `rgba(180,180,180,${0.15 + Math.random() * 0.25})`; ctx.beginPath(); ctx.arc(cx - 1, cy - 1, r, -0.5, 1.5); ctx.stroke(); const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 0.7); g.addColorStop(0, `rgba(55,55,60,${0.15 + Math.random() * 0.2})`); g.addColorStop(1, "rgba(90,90,90,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2); ctx.fill(); }
-  return new THREE.CanvasTexture(c);
-}
+const moonTexLoader = new THREE.TextureLoader();
 
 // ══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
@@ -673,7 +663,7 @@ const ArtemisTracker3D: FC = () => {
   const updCam = useCallback((): void => {
     const c = ctl.current, cam = camRef.current; if (!cam) return;
     c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
-    c.r = Math.max(10, Math.min(400, c.r));
+    c.r = Math.max(1.5, Math.min(400, c.r));
     cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
     cam.lookAt(c.tgt);
   }, []);
@@ -748,7 +738,10 @@ const ArtemisTracker3D: FC = () => {
     scn.add(earthGroup);
 
     // Moon
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 48, 48), new THREE.MeshPhongMaterial({ map: makeMoonTex(), specular: 0x111111, shininess: 2 }));
+    const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5 });
+    moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
+    moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.015; moonMat.needsUpdate = true; });
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
     scn.add(moon); objRef.current.moon = moon;
 
     // Trajectory
@@ -896,8 +889,9 @@ const ArtemisTracker3D: FC = () => {
           const maxSpread = Math.max(oV.length(), mV.length(), oV.distanceTo(mV));
           goalR = Math.max(30, maxSpread * 0.75);
         } else if (camMode === "moon") {
-          goalTgt = mV.clone();
-          goalR = 10;
+          const toOrion = oV.clone().sub(mV).normalize();
+          goalTgt = mV.clone().add(toOrion.multiplyScalar(MOON_R * 1.5));
+          goalR = Math.max(3, oV.distanceTo(mV) * 0.15);
         } else if (camMode === "earth") {
           goalTgt = new THREE.Vector3(0, 0, 0);
           goalR = 25;
