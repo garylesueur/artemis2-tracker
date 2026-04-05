@@ -1,0 +1,4 @@
+#!/bin/sh
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+cd /Users/gaz/dev/artemis2-tracker
+exec node node_modules/.bin/next dev
