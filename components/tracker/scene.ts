@@ -3,7 +3,6 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { SceneObjects } from "./types";
 import { OEM, EARTH_R, MOON_R, KM2U, LAUNCH_UTC } from "./data";
 import { getMoonPosKm } from "./ephemeris";
-import { makeEarthTex } from "./textures";
 
 export function initScene(
   canvas: HTMLCanvasElement,
@@ -52,19 +51,22 @@ export function initScene(
   };
   makeStars(800, 1, 1800); makeStars(300, 1.5, 1800); makeStars(50, 2.5, 1800);
 
-  // Earth — wrapped in group for axial tilt (23.4°)
+  // Earth — wrapped in group for axial tilt (23.4°), nudged to clear trajectory
   const earthGroup = new THREE.Group();
+  earthGroup.position.set(-3.1, -10.8, -5.8);
   earthGroup.rotation.z = 23.44 * Math.PI / 180;
 
-  const eTex = makeEarthTex(); eTex.wrapS = THREE.RepeatWrapping;
-  const earth = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 64), new THREE.MeshPhongMaterial({ map: eTex, specular: 0x334455, shininess: 20 }));
+  const texLoader = new THREE.TextureLoader();
+  const earthMat = new THREE.MeshPhongMaterial({ specular: 0x334455, shininess: 25 });
+  texLoader.load("/earth-color.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; earthMat.map = tex; earthMat.needsUpdate = true; });
+  texLoader.load("/earth-bump.jpg", (tex) => { earthMat.bumpMap = tex; earthMat.bumpScale = 0.05; earthMat.needsUpdate = true; });
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 64), earthMat);
   earthGroup.add(earth); objRef.current.earth = earth;
 
-  // Clouds
-  const cC = document.createElement("canvas"); cC.width = 1024; cC.height = 512;
-  const cCtx = cC.getContext("2d")!; cCtx.clearRect(0, 0, 1024, 512);
-  for (let i = 0; i < 30; i++) { cCtx.fillStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.1})`; cCtx.beginPath(); cCtx.ellipse(Math.random() * 1024, Math.random() * 512, 25 + Math.random() * 70, 8 + Math.random() * 18, Math.random() * Math.PI, 0, Math.PI * 2); cCtx.fill(); }
-  const clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 1.012, 48, 48), new THREE.MeshPhongMaterial({ map: new THREE.CanvasTexture(cC), transparent: true, opacity: 0.55, depthWrite: false }));
+  // Clouds — separate sphere with real cloud texture, rotates independently
+  const cloudMat = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.4, depthWrite: false });
+  texLoader.load("/earth-clouds.jpg", (tex) => { cloudMat.map = tex; cloudMat.needsUpdate = true; });
+  const clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 1.008, 48, 48), cloudMat);
   earthGroup.add(clouds); objRef.current.clouds = clouds;
 
   // Atmosphere

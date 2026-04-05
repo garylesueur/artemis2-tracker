@@ -158,7 +158,7 @@ const ArtemisTracker3D: FC = () => {
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
         } else if (camMode === "earth") {
-          goalTgt = new THREE.Vector3(0, 0, 0);
+          goalTgt = new THREE.Vector3(-3.1, -10.8, -5.8);
           goalR = 25;
           const away = new THREE.Vector3().sub(mV).normalize();
           const goalTheta = Math.atan2(away.z, away.x);
@@ -214,7 +214,7 @@ const ArtemisTracker3D: FC = () => {
         const MOON_R_U = MOON_R;
         const SUN_R_U = 696000 * KM2U;
         const labels: [string, THREE.Vector3, number, string][] = [
-          ["EARTH", new THREE.Vector3(0, 0, 0), EARTH_R_U, "#4499dd"],
+          ["EARTH", new THREE.Vector3(-3.1, -10.8, -5.8), EARTH_R_U, "#4499dd"],
           ["MOON", mV, MOON_R_U, "#999999"],
           ["ORION", oV, orionScale * 1.5, "#ffcc22"],
           ["SUN", sV, SUN_R_U, "#ffdd44"],
