@@ -685,7 +685,7 @@ const ArtemisTracker3D: FC = () => {
 
     const ren = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
     ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    ren.setClearColor(0x060c1a);
+    ren.setClearColor(0x030610);
     renRef.current = ren;
 
     const scn = new THREE.Scene(); scnRef.current = scn;
@@ -938,7 +938,7 @@ const ArtemisTracker3D: FC = () => {
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
 
   return (
-    <div style={{ background: "#060c1a", height: "100vh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ background: "#030610", height: "100vh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap');
         *{box-sizing:border-box;margin:0}
