@@ -6,6 +6,7 @@ import { fmtT, fmtD } from "./ephemeris";
 export const GLOBAL_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap');
   *{box-sizing:border-box;margin:0}
+  html,body{overscroll-behavior:none}
   .sc{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 14px}
   .lbl{font-size:10px;color:#7b8da4;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px}
   input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;height:20px}

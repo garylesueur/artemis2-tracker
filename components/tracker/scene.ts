@@ -199,12 +199,13 @@ export function setupControls(
   canvas.addEventListener("wheel", onW, { passive: false });
   canvas.addEventListener("contextmenu", (e: Event) => e.preventDefault());
 
-  canvas.addEventListener("touchstart", (e: TouchEvent) => { if (e.touches.length === 1) { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = false; ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY; } }, { passive: true });
+  canvas.addEventListener("touchstart", (e: TouchEvent) => { e.preventDefault(); if (e.touches.length === 1) { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = false; ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY; } }, { passive: false });
   canvas.addEventListener("touchmove", (e: TouchEvent) => {
+    e.preventDefault();
     const c = ctl.current;
     if (e.touches.length === 1 && c.drag) { c.theta -= (e.touches[0].clientX - c.lx) * 0.005; c.phi -= (e.touches[0].clientY - c.ly) * 0.005; c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY; updCam(); }
     if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { c.rTarget = Math.max(1.5, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); } c._lp = d; }
-  }, { passive: true });
+  }, { passive: false });
   canvas.addEventListener("touchend", () => { ctl.current.drag = false; ctl.current._lp = null; });
 
   return () => { window.removeEventListener("mousemove", onM); window.removeEventListener("mouseup", onU); };

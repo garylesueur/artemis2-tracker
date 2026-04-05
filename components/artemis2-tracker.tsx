@@ -200,7 +200,7 @@ const ArtemisTracker3D: FC = () => {
       <Transport live={live} speed={speed} eNow={eNow} onSpeedClick={onSpeedClick} onLive={goLive} onSlide={onSlide} />
 
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab" }} />
+        <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }} />
         <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN</div>
 
         <CameraControls
