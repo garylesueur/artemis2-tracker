@@ -46,6 +46,26 @@ export function getMoonPosKm(dateMs: number): Vec3 {
   };
 }
 
+// Geocentric Sun position (Earth-centered equatorial coords, km)
+// Low-precision solar ephemeris — good enough for visualisation
+export function getSunPosKm(dateMs: number): Vec3 {
+  const JD = dateMs / 86400000 + 2440587.5;
+  const d = JD - 2451545.0; // days since J2000
+  const d2r = Math.PI / 180;
+
+  const M = ((357.5291 + 0.98560028 * d) % 360) * d2r;
+  const L = ((280.4600 + 0.98564736 * d) % 360 + 1.9148 * Math.sin(M) + 0.0200 * Math.sin(2 * M)) * d2r;
+
+  const R = (1.00014 - 0.01671 * Math.cos(M) - 0.00014 * Math.cos(2 * M)) * 149597870.7; // km
+  const eps = 23.4393 * d2r;
+
+  return {
+    x: R * Math.cos(L),
+    y: R * Math.sin(L) * Math.cos(eps),
+    z: R * Math.sin(L) * Math.sin(eps),
+  };
+}
+
 // OEM interpolation — binary search + linear interp
 export function interpOEM(timeMs: number): Vec3 {
   if (timeMs <= OEM[0][0]) return { x: OEM[0][1], y: OEM[0][2], z: OEM[0][3] };

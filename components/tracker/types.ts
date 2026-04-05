@@ -20,17 +20,16 @@ export interface OrbitControls {
 
 export interface SceneObjects {
   earth?: THREE.Mesh;
-  earthLbl?: THREE.Sprite;
   clouds?: THREE.Mesh;
   moon?: THREE.Mesh;
-  moonLbl?: THREE.Sprite;
   orion?: THREE.Group;
   oGlow?: THREE.Mesh;
-  oLbl?: THREE.Sprite;
   cLine?: THREE.Line;
   trajLine?: THREE.Line;
   moonOrbit?: THREE.Line;
   trajPts?: THREE.Vector3[];
+  sun?: THREE.Mesh;
+  sunLight?: THREE.DirectionalLight;
 }
 
 export interface CrewMember {

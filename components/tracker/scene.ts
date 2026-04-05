@@ -15,43 +15,42 @@ export function initScene(
   ren.setClearColor(0x030610);
 
   const scn = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(50, 2, 0.01, 5000);
+  const cam = new THREE.PerspectiveCamera(50, 2, 0.1, 50000);
 
   // Lighting
-  const sunPos = new THREE.Vector3(-250, 80, 40);
   scn.add(new THREE.AmbientLight(0x2a3040, 0.6));
-  const sunL = new THREE.DirectionalLight(0xfff5e0, 2.0); sunL.position.copy(sunPos); scn.add(sunL);
+  const sunL = new THREE.DirectionalLight(0xfff5e0, 2.0);
+  scn.add(sunL);
+  objRef.current.sunLight = sunL;
 
-  // Sun body + corona
-  const sunM = new THREE.Mesh(new THREE.SphereGeometry(8, 32, 32), new THREE.MeshBasicMaterial({ color: 0xffffee }));
-  sunM.position.copy(sunPos); scn.add(sunM);
-  ([14, 22, 38, 60] as const).forEach((r, i) => {
-    const g = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 24), new THREE.MeshBasicMaterial({ color: [0xffffcc, 0xffdd88, 0xffaa44, 0xff7722][i], transparent: true, opacity: [0.12, 0.05, 0.02, 0.008][i], side: THREE.BackSide }));
-    g.position.copy(sunPos); scn.add(g);
-  });
+  // Sun — positioned correctly each frame via render loop
+  const sunR = 696000 * KM2U; // ~174 units
+  const sunMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(sunR, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffffee }),
+  );
+  scn.add(sunMesh);
+  objRef.current.sun = sunMesh;
 
-  // Lens flare
-  const mkFlare = (sz: number, col: string, op: number): void => {
-    const c2 = document.createElement("canvas"); c2.width = 128; c2.height = 128;
-    const ctx = c2.getContext("2d")!;
-    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    g.addColorStop(0, col); g.addColorStop(0.5, col.replace(",1)", ",0.2)")); g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c2), transparent: true, opacity: op, depthTest: false, blending: THREE.AdditiveBlending }));
-    sp.position.copy(sunPos); sp.scale.set(sz, sz, 1); scn.add(sp);
-  };
-  mkFlare(40, "rgba(255,255,200,1)", 0.4);
-  mkFlare(80, "rgba(255,200,100,1)", 0.1);
-
-  // Stars
+  // Stars — circular dot texture so they don't render as squares
+  const starDot = (() => {
+    const c = document.createElement("canvas"); c.width = 32; c.height = 32;
+    const ctx = c.getContext("2d")!;
+    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.8)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  })();
   const makeStars = (count: number, size: number, spread: number): void => {
     const g = new THREE.BufferGeometry();
     const p = new Float32Array(count * 3);
     for (let j = 0; j < count * 3; j++) p[j] = (Math.random() - 0.5) * spread;
     g.setAttribute("position", new THREE.BufferAttribute(p, 3));
-    scn.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size, sizeAttenuation: true, transparent: true, opacity: 0.9 })));
+    scn.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size, sizeAttenuation: false, transparent: true, opacity: 0.9, map: starDot })));
   };
-  makeStars(800, 0.3, 1800); makeStars(300, 0.7, 1800); makeStars(50, 1.2, 1800);
+  makeStars(800, 1, 1800); makeStars(300, 1.5, 1800); makeStars(50, 2.5, 1800);
 
   // Earth — wrapped in group for axial tilt (23.4°)
   const earthGroup = new THREE.Group();
@@ -136,8 +135,8 @@ export function initScene(
   nozzle.position.y = -1.2; orionGroup.add(nozzle);
 
   // Solar panels — 4 wings radiating outward from service module in X pattern
-  const panelMat = new THREE.MeshPhongMaterial({ color: 0x1a3a7a, emissive: 0x0a1530, specular: 0x4466aa, shininess: 60 });
-  const panelDarkMat = new THREE.MeshPhongMaterial({ color: 0x0f2255, emissive: 0x050a18 });
+  const panelMat = new THREE.MeshPhongMaterial({ color: 0x2a4a9a, emissive: 0x1a2a60, emissiveIntensity: 0.4, specular: 0x88aaff, shininess: 80 });
+  const panelDarkMat = new THREE.MeshPhongMaterial({ color: 0x1a3577, emissive: 0x0f1a40, emissiveIntensity: 0.3 });
   for (let i = 0; i < 4; i++) {
     const wing = new THREE.Group();
     // Panel extends outward (positive X in local space)
@@ -160,18 +159,6 @@ export function initScene(
   scn.add(oGlow);
 
   objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow;
-
-  // Labels
-  const mkLbl = (text: string, pos: THREE.Vector3, color: string, sz = 14): THREE.Sprite => {
-    const c2 = document.createElement("canvas"); c2.width = 256; c2.height = 64;
-    const ctx = c2.getContext("2d")!;
-    ctx.font = `bold ${sz * 2}px monospace`; ctx.fillStyle = color; ctx.textAlign = "center"; ctx.fillText(text, 128, 42);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c2), transparent: true, depthTest: false }));
-    sp.position.copy(pos); sp.scale.set(sz * 0.9, sz * 0.22, 1); scn.add(sp); return sp;
-  };
-  objRef.current.earthLbl = mkLbl("EARTH", new THREE.Vector3(0, -EARTH_R - 2, 0), "#4499dd", 14);
-  objRef.current.moonLbl = mkLbl("MOON", new THREE.Vector3(0, -MOON_R - 1.5, 0), "#999", 11);
-  objRef.current.oLbl = mkLbl("ORION", new THREE.Vector3(0, 3, 0), "#ffcc22", 10);
 
   // Resize
   const resize = (): void => { const p = canvas.parentElement; if (!p) return; ren.setSize(p.clientWidth, p.clientHeight); cam.aspect = p.clientWidth / p.clientHeight; cam.updateProjectionMatrix(); };
@@ -207,7 +194,7 @@ export function setupControls(
     e.preventDefault();
     const c = ctl.current;
     const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 60);
-    c.rTarget = Math.max(1.5, Math.min(400, c.rTarget * (1 + delta * 0.0006)));
+    c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + delta * 0.0006)));
   };
 
   canvas.addEventListener("mousedown", onD);
@@ -221,7 +208,7 @@ export function setupControls(
     e.preventDefault();
     const c = ctl.current;
     if (e.touches.length === 1 && c.drag) { c.theta -= (e.touches[0].clientX - c.lx) * 0.005; c.phi -= (e.touches[0].clientY - c.ly) * 0.005; c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY; updCam(); }
-    if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { c.rTarget = Math.max(1.5, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); } c._lp = d; }
+    if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); } c._lp = d; }
   }, { passive: false });
   canvas.addEventListener("touchend", () => { ctl.current.drag = false; ctl.current._lp = null; });
 

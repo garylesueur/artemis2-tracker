@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import * as THREE from "three";
 import type { CamMode, OrbitControls, SceneObjects } from "./tracker/types";
 import { OEM, LAUNCH_UTC, SPLASHDOWN_UTC, MISSION_DUR, DATA_START, DATA_END, KM2U, MOON_R, CREW } from "./tracker/data";
-import { getMoonPosKm, interpOEM, fmtT, getSpeedKmS } from "./tracker/ephemeris";
+import { getMoonPosKm, getSunPosKm, interpOEM, fmtT, getSpeedKmS } from "./tracker/ephemeris";
 import { initScene, setupControls } from "./tracker/scene";
 import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal } from "./tracker/ui";
 
@@ -41,6 +41,8 @@ const ArtemisTracker3D: FC = () => {
     (orionKmAhead.z - orionKm.z) * KM2U,
   ).normalize();
   const mV = new THREE.Vector3(moonKm.x * KM2U, moonKm.y * KM2U, moonKm.z * KM2U);
+  const sunKm = getSunPosKm(eNow);
+  const sV = new THREE.Vector3(sunKm.x * KM2U, sunKm.y * KM2U, sunKm.z * KM2U);
   const dE = Math.sqrt(orionKm.x ** 2 + orionKm.y ** 2 + orionKm.z ** 2);
   const dM = Math.sqrt((orionKm.x - moonKm.x) ** 2 + (orionKm.y - moonKm.y) ** 2 + (orionKm.z - moonKm.z) ** 2);
   const spd = getSpeedKmS(clampedTime);
@@ -65,13 +67,31 @@ const ArtemisTracker3D: FC = () => {
 
   const updCam = useCallback((): void => {
     const c = ctl.current, cam = camRef.current; if (!cam) return;
-    c.phi = ((c.phi % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    c.r = Math.max(1.5, Math.min(400, c.r));
+    c.r = Math.max(0.3, Math.min(400, c.r));
     cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
+    // Flip up vector when going past the poles so rotation is smooth
+    const upY = Math.sin(c.phi) >= 0 ? 1 : -1;
+    cam.up.set(0, upY, 0);
     cam.lookAt(c.tgt);
   }, []);
 
   const fullTrajPts = useRef<THREE.Vector3[]>([]);
+  const lblRef = useRef<HTMLDivElement>(null);
+
+  // Project a world-space position to screen coords, with a world-space radius for bottom offset
+  const projectToScreen = useCallback((worldPos: THREE.Vector3, worldRadius: number, cam: THREE.PerspectiveCamera, container: HTMLElement): { x: number; y: number; visible: boolean } => {
+    const v = worldPos.clone().project(cam);
+    const hw = container.clientWidth / 2;
+    const hh = container.clientHeight / 2;
+    const x = v.x * hw + hw;
+    const y = -v.y * hh + hh;
+    // Project a point at the bottom of the object to get screen-space offset
+    const bottomPos = worldPos.clone();
+    bottomPos.y -= worldRadius;
+    const vb = bottomPos.project(cam);
+    const yBottom = -vb.y * hh + hh;
+    return { x, y: yBottom, visible: v.z < 1 };
+  }, []);
 
   // Scene init
   useEffect(() => {
@@ -107,17 +127,13 @@ const ArtemisTracker3D: FC = () => {
       const orionScale = Math.max(0.15, Math.min(2.5, camDist * 0.012));
       o.orion.scale.setScalar(orionScale);
       o.oGlow!.scale.setScalar(orionScale * 1.2);
-      o.oLbl!.position.set(oV.x, oV.y + orionScale * 2, oV.z);
-      o.oLbl!.scale.setScalar(Math.max(0.4, orionScale * 0.6));
-      o.oLbl!.visible = showLabels && camDist > 15;
+
+      // Sun position and lighting direction
+      if (o.sun) o.sun.position.copy(sV);
+      if (o.sunLight) o.sunLight.position.copy(sV.clone().normalize().multiplyScalar(1000));
 
       o.moon!.position.copy(mV);
-      o.moonLbl!.position.set(mV.x, mV.y - MOON_R - 1.5, mV.z);
 
-      const camR = ctl.current.r;
-      const showBodyLabels = showLabels && camR > 60;
-      if (o.earthLbl) o.earthLbl.visible = showBodyLabels;
-      if (o.moonLbl) o.moonLbl.visible = showBodyLabels;
       if (o.trajLine) o.trajLine.visible = showTrajectory;
       if (o.cLine) o.cLine.visible = showTrajectory;
       if (o.moonOrbit) o.moonOrbit.visible = showMoonOrbit;
@@ -168,8 +184,9 @@ const ArtemisTracker3D: FC = () => {
       // Always update camera position from controls
       const cam = camRef.current;
       if (cam) {
-        c.phi = ((c.phi % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
         cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
+        const upY = Math.sin(c.phi) >= 0 ? 1 : -1;
+        cam.up.set(0, upY, 0);
         cam.lookAt(c.tgt);
       }
 
@@ -189,11 +206,45 @@ const ArtemisTracker3D: FC = () => {
       if (o.earth) o.earth.rotation.y = earthAngle;
       if (o.clouds) o.clouds.rotation.y = earthAngle * 0.97;
 
+      // Screen-space labels
+      const container = lblRef.current;
+      if (container && showLabels) {
+        const cam = camRef.current;
+        const EARTH_R_U = 6371 * KM2U;
+        const MOON_R_U = MOON_R;
+        const SUN_R_U = 696000 * KM2U;
+        const labels: [string, THREE.Vector3, number, string][] = [
+          ["EARTH", new THREE.Vector3(0, 0, 0), EARTH_R_U, "#4499dd"],
+          ["MOON", mV, MOON_R_U, "#999999"],
+          ["ORION", oV, orionScale * 1.5, "#ffcc22"],
+          ["SUN", sV, SUN_R_U, "#ffdd44"],
+        ];
+        // Ensure label elements exist
+        while (container.children.length < labels.length) {
+          const el = document.createElement("div");
+          el.style.cssText = "position:absolute;font:bold 10px monospace;letter-spacing:1.5px;pointer-events:none;text-align:center;transform:translateX(-50%);white-space:nowrap;padding:2px 6px;";
+          container.appendChild(el);
+        }
+        for (let i = 0; i < labels.length; i++) {
+          const [text, pos, radius, color] = labels[i];
+          const el = container.children[i] as HTMLElement;
+          const sc = projectToScreen(pos, radius, cam, container);
+          el.textContent = text;
+          el.style.color = color;
+          el.style.left = `${sc.x}px`;
+          el.style.top = `${sc.y + 6}px`;
+          el.style.display = sc.visible ? "" : "none";
+        }
+        container.style.display = "";
+      } else if (container) {
+        container.style.display = "none";
+      }
+
       renRef.current.render(scnRef.current, camRef.current);
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [oV, mV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit]);
+  }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen]);
 
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
 
@@ -208,6 +259,7 @@ const ArtemisTracker3D: FC = () => {
 
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }} />
+        <div ref={lblRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "hidden" }} />
         <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN</div>
 
         <CameraControls
