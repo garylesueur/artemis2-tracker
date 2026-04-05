@@ -145,7 +145,11 @@ const ArtemisTracker3D: FC = () => {
         } else if (camMode === "flyby") {
           goalTgt = oV.clone().lerp(mV, 0.5);
           const halfSpan = oV.distanceTo(mV) * 0.5 + MOON_R;
-          goalR = Math.max(3, halfSpan / Math.tan(22 * Math.PI / 180));
+          const cam = camRef.current!;
+          const vFov = cam.fov * Math.PI / 360; // half vertical FOV in radians
+          const hFov = Math.atan(Math.tan(vFov) * cam.aspect); // half horizontal FOV
+          const fov = Math.min(vFov, hFov) * 0.85; // use narrower axis with margin
+          goalR = Math.max(3, halfSpan / Math.tan(fov));
         } else {
           goalTgt = new THREE.Vector3(mV.x * 0.5, mV.y * 0.5, mV.z * 0.5);
           goalR = 140;
@@ -189,7 +193,7 @@ const ArtemisTracker3D: FC = () => {
   const handleCamMode = (mode: CamMode): void => { ctl.current.manual = false; setCamMode(mode); };
 
   return (
-    <div style={{ background: "#030610", height: "100vh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ background: "#030610", height: "100dvh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{GLOBAL_STYLES}</style>
 
       <Header phase={phase} day={day} met={met} phaseCol={phaseCol} />
