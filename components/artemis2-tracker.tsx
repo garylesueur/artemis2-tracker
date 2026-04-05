@@ -642,7 +642,7 @@ const ArtemisTracker3D: FC = () => {
   const [camMode, setCamMode] = useState<CamMode>("flyby");
   const [showLabels, setShowLabels] = useState(true);
   const [showTrajectory, setShowTrajectory] = useState(true);
-  const [showMoonOrbit, setShowMoonOrbit] = useState(false);
+  const [showMoonOrbit, setShowMoonOrbit] = useState(true);
 
   const eNow = live ? now : (tOver ?? now);
   const met = eNow - LAUNCH_UTC;
