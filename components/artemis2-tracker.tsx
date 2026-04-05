@@ -738,7 +738,7 @@ const ArtemisTracker3D: FC = () => {
     scn.add(earthGroup);
 
     // Moon
-    const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5 });
+    const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5, emissive: 0x111518, emissiveIntensity: 0.35 });
     moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
     moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.015; moonMat.needsUpdate = true; });
     const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
