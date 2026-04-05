@@ -148,11 +148,14 @@ interface DistancePanelsProps {
 }
 
 export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow }) => {
-  const [utc, setUtc] = useState(true);
+  const [utc, setUtc] = useState(false);
   const dt = new Date(eNow);
+  const dateStr = utc
+    ? dt.toUTCString().replace(/\d{2}:\d{2}:\d{2} GMT/, "").trim()
+    : dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   const timeStr = utc
-    ? dt.toUTCString().replace("GMT", "UTC")
-    : dt.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" });
+    ? dt.toUTCString().match(/\d{2}:\d{2}:\d{2}/)?.[0] + " UTC"
+    : dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" });
 
   return (
     <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 5 }}>
@@ -168,7 +171,8 @@ export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow }) => {
       </div>
       <button className="dist-panel" onClick={() => setUtc(u => !u)} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
         <div className="lbl">{utc ? "UTC" : "LOCAL"}</div>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a9bb2", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{timeStr}</div>
+        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a9bb2", fontVariantNumeric: "tabular-nums" }}>{dateStr}</div>
+        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a9bb2", fontVariantNumeric: "tabular-nums" }}>{timeStr}</div>
       </button>
     </div>
   );
