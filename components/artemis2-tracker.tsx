@@ -917,9 +917,9 @@ const ArtemisTracker3D: FC = () => {
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
         } else if (camMode === "flyby") {
-          goalTgt = new THREE.Vector3((oV.x + mV.x) * 0.5, (oV.y + mV.y) * 0.5, (oV.z + mV.z) * 0.5);
+          goalTgt = oV.clone().lerp(mV, 0.35);
           const flybyDist = oV.distanceTo(mV);
-          goalR = Math.max(8, flybyDist * 1.2);
+          goalR = Math.max(3, flybyDist * 0.45);
         } else {
           goalTgt = new THREE.Vector3(mV.x * 0.5, mV.y * 0.5, mV.z * 0.5);
           goalR = 140;
