@@ -18,6 +18,7 @@ interface OrbitControls {
   theta: number;
   phi: number;
   r: number;
+  rTarget: number;
   tgt: THREE.Vector3;
   _lp?: number | null;
 }
@@ -623,7 +624,7 @@ const ArtemisTracker3D: FC = () => {
   const scnRef = useRef<THREE.Scene | null>(null);
   const renRef = useRef<THREE.WebGLRenderer | null>(null);
   const objRef = useRef<SceneObjects>({});
-  const ctl = useRef<OrbitControls>({ drag: false, right: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.42, r: 180, tgt: new THREE.Vector3(48, 0, 0) });
+  const ctl = useRef<OrbitControls>({ drag: false, right: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.42, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
 
   const [now, setNow] = useState<number>(Date.now());
   const [tOver, setTOver] = useState<number | null>(null);
@@ -831,19 +832,11 @@ const ArtemisTracker3D: FC = () => {
       updCam();
     };
     const onU = (): void => { ctl.current.drag = false; };
-    let zoomTarget = ctl.current.r;
-    let zoomRaf = 0;
-    const animateZoom = (): void => {
-      const c = ctl.current;
-      c.r += (zoomTarget - c.r) * 0.15;
-      if (Math.abs(zoomTarget - c.r) > 0.01) { zoomRaf = requestAnimationFrame(animateZoom); }
-      updCam();
-    };
     const onW = (e: WheelEvent): void => {
       e.preventDefault();
-      const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 80);
-      zoomTarget = Math.max(1.5, Math.min(400, zoomTarget * (1 + delta * 0.0008)));
-      if (!zoomRaf) zoomRaf = requestAnimationFrame(animateZoom);
+      const c = ctl.current;
+      const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 60);
+      c.rTarget = Math.max(1.5, Math.min(400, c.rTarget * (1 + delta * 0.0006)));
     };
 
     cv.addEventListener("mousedown", onD);
@@ -856,7 +849,7 @@ const ArtemisTracker3D: FC = () => {
     cv.addEventListener("touchmove", (e: TouchEvent) => {
       const c = ctl.current;
       if (e.touches.length === 1 && c.drag) { c.theta -= (e.touches[0].clientX - c.lx) * 0.005; c.phi -= (e.touches[0].clientY - c.ly) * 0.005; c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY; updCam(); }
-      if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { zoomTarget = Math.max(1.5, Math.min(400, zoomTarget * (1 + (c._lp - d) * 0.003))); if (!zoomRaf) zoomRaf = requestAnimationFrame(animateZoom); } c._lp = d; }
+      if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (c._lp) { c.rTarget = Math.max(1.5, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); } c._lp = d; }
     }, { passive: true });
     cv.addEventListener("touchend", () => { ctl.current.drag = false; ctl.current._lp = null; });
 
@@ -892,6 +885,10 @@ const ArtemisTracker3D: FC = () => {
       if (o.earthLbl) o.earthLbl.visible = showBodyLabels;
       if (o.moonLbl) o.moonLbl.visible = showBodyLabels;
 
+      // Smooth zoom lerp
+      const zc = ctl.current;
+      zc.r += (zc.rTarget - zc.r) * 0.12;
+
       // Camera tracking
       if (!ctl.current.drag) {
         const c = ctl.current;
@@ -917,7 +914,7 @@ const ArtemisTracker3D: FC = () => {
           goalR = 140;
         }
         c.tgt.lerp(goalTgt, 0.06);
-        c.r += (goalR - c.r) * 0.06;
+        c.rTarget += (goalR - c.rTarget) * 0.06;
         const cam = camRef.current;
         if (cam) {
           c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
