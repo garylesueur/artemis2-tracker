@@ -25,13 +25,13 @@ export const GLOBAL_STYLES = `
     .hdr-met{font-size:15px!important}
     .hdr-phase{display:none!important}
     .hdr-phase-mobile{display:inline-block!important}
-    .transport-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;border-top:1px solid rgba(255,255,255,.15)!important;border-bottom:none!important;background:rgba(3,6,16,.9)!important;backdrop-filter:blur(8px)!important;padding:6px 10px!important;z-index:20!important;gap:6px!important;flex-wrap:nowrap!important}
+    .transport-bar{order:99!important;border-top:1px solid rgba(255,255,255,.15)!important;border-bottom:none!important;padding:6px 10px!important;gap:6px!important;flex-wrap:nowrap!important}
     .transport-ts{font-size:9px!important}
     .transport-ts span:last-child{display:none!important}
     .transport-bar input[type=range]{height:32px!important}
     .transport-bar input[type=range]::-webkit-slider-thumb{width:22px!important;height:22px!important;margin-top:-10px!important}
     .transport-bar input[type=range]::-moz-range-thumb{width:22px!important;height:22px!important}
-    .cam-panel{top:auto!important;bottom:56px!important}
+    .cam-panel{top:auto!important;bottom:8px!important}
     .cam-btn{width:auto!important;min-width:36px!important;justify-content:center!important}
     .cam-btn .cam-label{display:none!important}
     .cam-btn-expanded .cam-label{display:inline!important}
