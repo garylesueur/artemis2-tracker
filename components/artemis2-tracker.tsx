@@ -453,7 +453,7 @@ const OEM: OEMPoint[] = [
   [1775865917000,3280,4880,2380],
   [1775866317000,1680,4890,2830],
   [1775866617000,460,4620,2960],
-  [1775866800000,0,4400,2900],
+  [1775865960000,0,4400,2900],
 ];
 
 // ══════════════════════════════════════════════════════════════
@@ -522,7 +522,7 @@ function interpOEM(timeMs: number): Vec3 {
 // ══════════════════════════════════════════════════════════════
 const LAUNCH_UTC = new Date("2026-04-01T22:35:00Z").getTime();
 const FLYBY_UTC = new Date("2026-04-06T14:30:00Z").getTime();
-const SPLASHDOWN_UTC = new Date("2026-04-11T00:20:00Z").getTime();
+const SPLASHDOWN_UTC = new Date("2026-04-11T00:06:00Z").getTime();
 const MISSION_DUR = SPLASHDOWN_UTC - LAUNCH_UTC;
 const DATA_START = OEM[0][0];
 const DATA_END = OEM[OEM.length - 1][0];
