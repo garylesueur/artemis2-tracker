@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import * as THREE from "three";
 import type { CamMode, OrbitControls, SceneObjects } from "./tracker/types";
 import { OEM, LAUNCH_UTC, SPLASHDOWN_UTC, MISSION_DUR, DATA_START, DATA_END, KM2U, MOON_R, CREW } from "./tracker/data";
-import { getMoonPosKm, interpOEM, fmtT } from "./tracker/ephemeris";
+import { getMoonPosKm, interpOEM, fmtT, getSpeedKmS } from "./tracker/ephemeris";
 import { initScene, setupControls } from "./tracker/scene";
 import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal } from "./tracker/ui";
 
@@ -37,6 +37,7 @@ const ArtemisTracker3D: FC = () => {
   const mV = new THREE.Vector3(moonKm.x * KM2U, moonKm.y * KM2U, moonKm.z * KM2U);
   const dE = Math.sqrt(orionKm.x ** 2 + orionKm.y ** 2 + orionKm.z ** 2);
   const dM = Math.sqrt((orionKm.x - moonKm.x) ** 2 + (orionKm.y - moonKm.y) ** 2 + (orionKm.z - moonKm.z) ** 2);
+  const spd = getSpeedKmS(clampedTime);
 
   let phase = "Pre-launch";
   if (met > MISSION_DUR) phase = "Splashdown";
@@ -214,7 +215,7 @@ const ArtemisTracker3D: FC = () => {
           onToggleMoonOrbit={() => setShowMoonOrbit(v => !v)}
         />
 
-        <DistancePanels dE={dE} dM={dM} eNow={eNow} />
+        <DistancePanels dE={dE} dM={dM} eNow={eNow} speed={spd} />
       </div>
 
       <BottomBar mf={mf} eNow={eNow} crew={CREW} onCrewClick={() => setShowCrew(true)} />

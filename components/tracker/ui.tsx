@@ -145,10 +145,12 @@ interface DistancePanelsProps {
   dE: number;
   dM: number;
   eNow: number;
+  speed: number;
 }
 
-export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow }) => {
+export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow, speed }) => {
   const [utc, setUtc] = useState(false);
+  const [speedUnit, setSpeedUnit] = useState<"kmh" | "ms" | "mph">("kmh");
   const dt = new Date(eNow);
   const dateStr = utc
     ? dt.toUTCString().replace(/\d{2}:\d{2}:\d{2} GMT/, "").trim()
@@ -169,6 +171,14 @@ export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow }) => {
         <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#b8c0cc", fontVariantNumeric: "tabular-nums" }}>{fmtD(dM)}</div>
         <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dM * 0.621371).replace("km", "mi")}</div>
       </div>
+      <button className="dist-panel" onClick={() => setSpeedUnit(u => u === "kmh" ? "ms" : u === "ms" ? "mph" : "kmh")} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
+        <div className="lbl">SPEED</div>
+        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#eab308", fontVariantNumeric: "tabular-nums" }}>
+          {speedUnit === "kmh" ? `${Math.round(speed * 3600).toLocaleString()} km/h`
+            : speedUnit === "ms" ? `${Math.round(speed * 1000).toLocaleString()} m/s`
+            : `${Math.round(speed * 2236.936).toLocaleString()} mph`}
+        </div>
+      </button>
       <button className="dist-panel" onClick={() => setUtc(u => !u)} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
         <div className="lbl">{utc ? "UTC" : "LOCAL"}</div>
         <div style={{ fontSize: 11, fontWeight: 500, color: "#8a9bb2", fontVariantNumeric: "tabular-nums" }}>{dateStr}</div>

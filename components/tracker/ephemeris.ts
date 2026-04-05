@@ -57,6 +57,15 @@ export function interpOEM(timeMs: number): Vec3 {
   return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, z: a[3] + (b[3] - a[3]) * t };
 }
 
+// Speed from finite-difference of OEM positions (km/s)
+export function getSpeedKmS(timeMs: number): number {
+  const dt = 1000; // 1-second step
+  const a = interpOEM(timeMs - dt);
+  const b = interpOEM(timeMs + dt);
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) / (2 * dt / 1000);
+}
+
 // Formatting helpers
 export function fmtT(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
