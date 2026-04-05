@@ -13,6 +13,7 @@ type CamMode = "full" | "orion" | "moon" | "earth" | "flyby";
 interface OrbitControls {
   drag: boolean;
   right: boolean;
+  manual: boolean;
   lx: number;
   ly: number;
   theta: number;
@@ -623,7 +624,7 @@ const ArtemisTracker3D: FC = () => {
   const scnRef = useRef<THREE.Scene | null>(null);
   const renRef = useRef<THREE.WebGLRenderer | null>(null);
   const objRef = useRef<SceneObjects>({});
-  const ctl = useRef<OrbitControls>({ drag: false, right: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.42, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
+  const ctl = useRef<OrbitControls>({ drag: false, right: false, manual: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.42, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
 
   const [now, setNow] = useState<number>(Date.now());
   const [tOver, setTOver] = useState<number | null>(null);
@@ -812,7 +813,7 @@ const ArtemisTracker3D: FC = () => {
     resize(); window.addEventListener("resize", resize); updCam();
 
     // Controls
-    const onD = (e: MouseEvent): void => { ctl.current.drag = true; ctl.current.right = e.button === 2; ctl.current.lx = e.clientX; ctl.current.ly = e.clientY; };
+    const onD = (e: MouseEvent): void => { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = e.button === 2; ctl.current.lx = e.clientX; ctl.current.ly = e.clientY; };
     const onM = (e: MouseEvent): void => {
       const c = ctl.current; if (!c.drag) return;
       const dx = e.clientX - c.lx, dy = e.clientY - c.ly; c.lx = e.clientX; c.ly = e.clientY;
@@ -840,7 +841,7 @@ const ArtemisTracker3D: FC = () => {
     cv.addEventListener("wheel", onW, { passive: false });
     cv.addEventListener("contextmenu", (e: Event) => e.preventDefault());
 
-    cv.addEventListener("touchstart", (e: TouchEvent) => { if (e.touches.length === 1) { ctl.current.drag = true; ctl.current.right = false; ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY; } }, { passive: true });
+    cv.addEventListener("touchstart", (e: TouchEvent) => { if (e.touches.length === 1) { ctl.current.drag = true; ctl.current.manual = true; ctl.current.right = false; ctl.current.lx = e.touches[0].clientX; ctl.current.ly = e.touches[0].clientY; } }, { passive: true });
     cv.addEventListener("touchmove", (e: TouchEvent) => {
       const c = ctl.current;
       if (e.touches.length === 1 && c.drag) { c.theta -= (e.touches[0].clientX - c.lx) * 0.005; c.phi -= (e.touches[0].clientY - c.ly) * 0.005; c.lx = e.touches[0].clientX; c.ly = e.touches[0].clientY; updCam(); }
@@ -883,9 +884,9 @@ const ArtemisTracker3D: FC = () => {
       const zc = ctl.current;
       zc.r += (zc.rTarget - zc.r) * 0.12;
 
-      // Camera tracking
-      if (!ctl.current.drag) {
-        const c = ctl.current;
+      // Camera tracking (skip when user has dragged)
+      const c = ctl.current;
+      if (!c.drag && !c.manual) {
         let goalTgt: THREE.Vector3, goalR: number;
         if (camMode === "orion") {
           const mid = new THREE.Vector3((oV.x + mV.x) / 3, (oV.y + mV.y) / 3, (oV.z + mV.z) / 3);
@@ -918,12 +919,14 @@ const ArtemisTracker3D: FC = () => {
         }
         c.tgt.lerp(goalTgt, 0.06);
         c.rTarget += (goalR - c.rTarget) * 0.06;
-        const cam = camRef.current;
-        if (cam) {
-          c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
-          cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
-          cam.lookAt(c.tgt);
-        }
+      }
+
+      // Always update camera position from controls
+      const cam = camRef.current;
+      if (cam) {
+        c.phi = Math.max(0.05, Math.min(Math.PI - 0.05, c.phi));
+        cam.position.set(c.tgt.x + c.r * Math.sin(c.phi) * Math.cos(c.theta), c.tgt.y + c.r * Math.cos(c.phi), c.tgt.z + c.r * Math.sin(c.phi) * Math.sin(c.theta));
+        cam.lookAt(c.tgt);
       }
 
       // Completed trail
@@ -1006,7 +1009,7 @@ const ArtemisTracker3D: FC = () => {
 
         <div style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 4 }}>
           {([{ id: "full" as CamMode, label: "FULL MISSION", icon: "◎" }, { id: "orion" as CamMode, label: "FOLLOW ORION", icon: "△" }, { id: "flyby" as CamMode, label: "FLYBY VIEW", icon: "⟐" }, { id: "moon" as CamMode, label: "MOON", icon: "◑" }, { id: "earth" as CamMode, label: "EARTH", icon: "◉" }]).map(v => (
-            <button key={v.id} onClick={() => setCamMode(v.id)}
+            <button key={v.id} onClick={() => { ctl.current.manual = false; setCamMode(v.id); }}
               style={{ display: "flex", alignItems: "center", gap: 8, background: camMode === v.id ? "rgba(234,179,8,.15)" : "rgba(3,6,16,.75)", backdropFilter: "blur(8px)", border: camMode === v.id ? "1px solid rgba(234,179,8,.35)" : "1px solid rgba(255,255,255,.12)", color: camMode === v.id ? "#eab308" : "#8a9bb2", borderRadius: 6, padding: "7px 12px", fontSize: 11, fontFamily: "inherit", letterSpacing: ".5px", textAlign: "left" as const, width: 155, transition: "all .2s ease" }}>
               <span style={{ fontSize: 15, lineHeight: 1 }}>{v.icon}</span>
               <span>{v.label}</span>
