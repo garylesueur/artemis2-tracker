@@ -27,8 +27,6 @@ export const GLOBAL_STYLES = `
     .hdr-phase{display:none!important}
     .hdr-phase-mobile{display:inline-block!important}
     .transport-bar{order:99!important;border-top:1px solid rgba(255,255,255,.15)!important;border-bottom:none!important;padding:6px 10px!important;gap:6px!important;flex-wrap:nowrap!important}
-    .transport-ts{font-size:9px!important}
-    .transport-ts span:last-child{display:none!important}
     .transport-bar input[type=range]{height:32px!important}
     .transport-bar input[type=range]::-webkit-slider-thumb{width:22px!important;height:22px!important;margin-top:-10px!important}
     .transport-bar input[type=range]::-moz-range-thumb{width:22px!important;height:22px!important}
@@ -93,10 +91,6 @@ export const Transport: FC<TransportProps> = ({ live, speed, eNow, onSpeedClick,
     ))}
     <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
     <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ flex: 1, minWidth: 120 }} />
-    <span className="transport-ts" style={{ fontSize: 10, color: "#7b8da4", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-      <span>{new Date(eNow).toUTCString().replace("GMT", "UTC")}</span>
-      <span style={{ color: "#8a9bb2" }}>{new Date(eNow).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })}</span>
-    </span>
   </div>
 );
 
@@ -150,22 +144,35 @@ export const CameraControls: FC<CameraControlsProps> = ({ camMode, showLabels, s
 interface DistancePanelsProps {
   dE: number;
   dM: number;
+  eNow: number;
 }
 
-export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM }) => (
-  <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 5 }}>
-    <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
-      <div className="lbl">EARTH DISTANCE</div>
-      <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>{fmtD(dE)}</div>
-      <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dE * 0.621371).replace("km", "mi")}</div>
+export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow }) => {
+  const [utc, setUtc] = useState(true);
+  const dt = new Date(eNow);
+  const timeStr = utc
+    ? dt.toUTCString().replace("GMT", "UTC")
+    : dt.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" });
+
+  return (
+    <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
+        <div className="lbl">EARTH DISTANCE</div>
+        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>{fmtD(dE)}</div>
+        <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dE * 0.621371).replace("km", "mi")}</div>
+      </div>
+      <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
+        <div className="lbl">MOON DISTANCE</div>
+        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#b8c0cc", fontVariantNumeric: "tabular-nums" }}>{fmtD(dM)}</div>
+        <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dM * 0.621371).replace("km", "mi")}</div>
+      </div>
+      <button className="dist-panel" onClick={() => setUtc(u => !u)} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
+        <div className="lbl">{utc ? "UTC" : "LOCAL"}</div>
+        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a9bb2", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{timeStr}</div>
+      </button>
     </div>
-    <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
-      <div className="lbl">MOON DISTANCE</div>
-      <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#b8c0cc", fontVariantNumeric: "tabular-nums" }}>{fmtD(dM)}</div>
-      <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dM * 0.621371).replace("km", "mi")}</div>
-    </div>
-  </div>
-);
+  );
+};
 
 interface BottomBarProps {
   mf: number;

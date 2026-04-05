@@ -214,7 +214,7 @@ const ArtemisTracker3D: FC = () => {
           onToggleMoonOrbit={() => setShowMoonOrbit(v => !v)}
         />
 
-        <DistancePanels dE={dE} dM={dM} />
+        <DistancePanels dE={dE} dM={dM} eNow={eNow} />
       </div>
 
       <BottomBar mf={mf} eNow={eNow} crew={CREW} onCrewClick={() => setShowCrew(true)} />
