@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Artemis II Tracker",
+  title: {
+    default: "Artemis II Tracker",
+    template: "%s | Artemis II Tracker",
+  },
   description: "Real-time 3D tracker for NASA's Artemis II mission",
+  metadataBase: new URL("https://artemis2-ten.vercel.app"),
 };
 
 export default function RootLayout({
