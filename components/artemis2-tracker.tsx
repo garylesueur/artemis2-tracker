@@ -31,6 +31,7 @@ interface SceneObjects {
   orion?: THREE.Group;
   oGlow?: THREE.Mesh;
   oLbl?: THREE.Sprite;
+  oLight?: THREE.PointLight;
   cLine?: THREE.Line;
   trajPts?: THREE.Vector3[];
 }
@@ -798,6 +799,11 @@ const ArtemisTracker3D: FC = () => {
 
     const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.1 }));
     scn.add(oGlow);
+
+    const oLight = new THREE.PointLight(0xaabbdd, 3, 15, 1.5);
+    scn.add(oLight);
+    objRef.current.oLight = oLight;
+
     objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow;
 
     // Labels
@@ -863,6 +869,7 @@ const ArtemisTracker3D: FC = () => {
       o.orion.rotation.y += 0.003;
       o.orion.rotation.z += 0.001;
       o.oGlow!.position.copy(oV);
+      o.oLight!.position.copy(oV);
 
       const camDist = camRef.current.position.distanceTo(oV);
       const orionScale = Math.max(0.15, Math.min(2.5, camDist * 0.012));
