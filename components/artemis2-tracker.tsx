@@ -681,7 +681,7 @@ const ArtemisTracker3D: FC = () => {
     renRef.current = ren;
 
     const scn = new THREE.Scene(); scnRef.current = scn;
-    const cam = new THREE.PerspectiveCamera(50, 2, 0.01, 5000); camRef.current = cam;
+    const cam = new THREE.PerspectiveCamera(50, 2, 0.01, 5000); cam.layers.enable(1); camRef.current = cam;
 
     // Lighting
     const sunPos = new THREE.Vector3(-250, 80, 40);
@@ -789,12 +789,14 @@ const ArtemisTracker3D: FC = () => {
       wing.position.z = Math.sin(i * Math.PI / 2) * 0.95;
       orionGroup.add(wing);
     }
+    orionGroup.traverse((child) => { child.layers.enable(1); });
     scn.add(orionGroup);
 
     const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.1 }));
     scn.add(oGlow);
 
     const oLight = new THREE.PointLight(0xaabbdd, 3, 15, 1.5);
+    oLight.layers.set(1);
     scn.add(oLight);
     objRef.current.oLight = oLight;
 
