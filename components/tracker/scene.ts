@@ -167,8 +167,14 @@ export function initScene(
     // Strut connecting SM body to panel
     const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.15, 6), new THREE.MeshPhongMaterial({ color: 0x888888 }));
     strut.rotation.z = Math.PI / 2; strut.position.x = 0.07; wing.add(strut);
-    // Position at SM surface, rotated in X pattern (45° offset)
-    const angle = (i * Math.PI) / 2 + Math.PI / 4;
+    // Position at SM surface — two pairs, top pair and bottom pair close together
+    const angles = [
+      Math.PI * 0.15,   // top-right
+      Math.PI * 0.85,   // top-left
+      Math.PI * 1.15,   // bottom-left
+      Math.PI * 1.85,   // bottom-right
+    ];
+    const angle = angles[i];
     wing.position.set(Math.cos(angle) * 0.32, -0.75, Math.sin(angle) * 0.32);
     wing.rotation.y = -angle;
     orionGroup.add(wing);
