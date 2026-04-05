@@ -947,7 +947,14 @@ const ArtemisTracker3D: FC = () => {
     return () => cancelAnimationFrame(raf);
   }, [oV, mV, clampedTime, mf, camMode, eNow]);
 
-  const crew = [{ n: "Wiseman", r: "CDR" }, { n: "Glover", r: "PLT" }, { n: "Koch", r: "MS1" }, { n: "Hansen", r: "MS2" }];
+  const [selectedCrew, setSelectedCrew] = useState<string | null>(null);
+
+  const crew = [
+    { n: "Wiseman", r: "CDR", full: "Reid Wiseman", title: "Commander", age: 50, img: "/crew/wiseman.jpg", rank: "Captain, U.S. Navy (Ret.)", born: "Baltimore, Maryland", flights: 2, days: 165, evas: 2, bio: "Navy test pilot and engineer. Flew on ISS Expedition 41 in 2014 logging 165 days and two spacewalks. Former NASA Chief Astronaut. Oldest person to travel beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/g-reid-wiseman/" },
+    { n: "Glover", r: "PLT", full: "Victor Glover", title: "Pilot", age: 49, img: "/crew/glover.jpg", rank: "Captain, U.S. Navy", born: "Pomona, California", flights: 2, days: 168, evas: 4, bio: "Fighter pilot with 3,000+ flight hours across 40+ aircraft and 24 combat missions. Piloted SpaceX Crew-1 to the ISS in 2020. First person of color to travel beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/victor-j-glover/" },
+    { n: "Koch", r: "MS1", full: "Christina Koch", title: "Mission Specialist 1", age: 47, img: "/crew/koch.jpg", rank: "NASA Astronaut", born: "Grand Rapids, Michigan", flights: 2, days: 328, evas: 6, bio: "Electrical engineer and physicist. Set the record for longest single spaceflight by a woman at 328 days on ISS Expeditions 59–61. Participated in the first all-female spacewalks. First woman beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/christina-hammock-koch/" },
+    { n: "Hansen", r: "MS2", full: "Jeremy Hansen", title: "Mission Specialist 2", age: 50, img: "/crew/hansen.jpg", rank: "Colonel, Canadian Forces", born: "London, Ontario", flights: 1, days: 0, evas: 0, bio: "CF-18 fighter pilot and combat operations officer with NORAD. First Canadian to lead a NASA astronaut class. First non-U.S. citizen to fly beyond low Earth orbit. Selected by the Canadian Space Agency in 2009.", url: "https://www.nasa.gov/humans-in-space/astronauts/jeremy-hansen/" },
+  ];
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
 
   return (
@@ -1035,10 +1042,48 @@ const ArtemisTracker3D: FC = () => {
           <div style={{ fontSize: 15, fontWeight: 700, color: eNow < SPLASHDOWN_UTC ? "#60a5fa" : "#22c55e" }}>{eNow < SPLASHDOWN_UTC ? `T−${fmtT(SPLASHDOWN_UTC - eNow)}` : "COMPLETE"}</div>
         </div>
         <div className="sc" style={{ flex: 1.5, minWidth: 200 }}>
-          <div className="lbl">CREW — ORION "INTEGRITY"</div>
-          <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <span key={c.n} style={{ fontSize: 12 }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8" }}>{c.n}</span></span>)}</div>
+          <div className="lbl">CREW — ORION &ldquo;INTEGRITY&rdquo;</div>
+          <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <button key={c.n} onClick={() => setSelectedCrew(c.n)} style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8", borderBottom: "1px solid rgba(255,255,255,.15)" }}>{c.n}</span></button>)}</div>
         </div>
       </div>
+
+      {selectedCrew && (() => {
+        const c = crew.find(m => m.n === selectedCrew)!;
+        return (
+          <div onClick={() => setSelectedCrew(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#0c1220", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, width: 420, maxWidth: "90vw", overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,.6)" }}>
+              <div style={{ display: "flex", gap: 16, padding: 20 }}>
+                <img src={c.img} alt={c.full} style={{ width: 100, height: 133, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 20, fontWeight: 700, color: "#e2e8f0" }}>{c.full}</div>
+                  <div style={{ fontSize: 11, color: "#eab308", letterSpacing: "1px", marginTop: 2 }}>{c.title.toUpperCase()}</div>
+                  <div style={{ fontSize: 11, color: "#7b8da4", marginTop: 4 }}>{c.rank}</div>
+                  <div style={{ fontSize: 11, color: "#7b8da4", marginTop: 2 }}>Born: {c.born}</div>
+                  <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.flights}</div>
+                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>FLIGHTS</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.days}</div>
+                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>DAYS</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#60a5fa" }}>{c.evas}</div>
+                      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: "1px" }}>EVAS</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: "0 20px 16px", fontSize: 12, lineHeight: 1.6, color: "#9aa8ba" }}>{c.bio}</div>
+              <div style={{ padding: "0 20px 20px", display: "flex", gap: 8 }}>
+                <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", background: "rgba(96,165,250,.08)", border: "1px solid rgba(96,165,250,.2)", borderRadius: 6, padding: "6px 14px", textDecoration: "none", letterSpacing: ".5px" }}>NASA BIO</a>
+                <button onClick={() => setSelectedCrew(null)} style={{ fontSize: 11, color: "#7b8da4", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 6, padding: "6px 14px", marginLeft: "auto", letterSpacing: ".5px" }}>CLOSE</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
