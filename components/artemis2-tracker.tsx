@@ -200,12 +200,13 @@ const ArtemisTracker3D: FC = () => {
         cam.lookAt(c.tgt);
       }
 
-      // Completed trail
+      // Completed trail — spline has 4x more points than OEM
       const ci = OEM.findIndex(d => d[0] > clampedTime);
-      const idx = ci < 0 ? OEM.length : ci;
-      if (idx >= 2 && fullTrajPts.current.length > 0) {
+      const rawIdx = ci < 0 ? OEM.length : ci;
+      const splineIdx = Math.min(rawIdx * 4, fullTrajPts.current.length);
+      if (splineIdx >= 2 && fullTrajPts.current.length > 0) {
         o.cLine!.geometry.dispose();
-        o.cLine!.geometry = new THREE.BufferGeometry().setFromPoints(fullTrajPts.current.slice(0, idx));
+        o.cLine!.geometry = new THREE.BufferGeometry().setFromPoints(fullTrajPts.current.slice(0, splineIdx));
       }
 
       // Earth rotation — sidereal

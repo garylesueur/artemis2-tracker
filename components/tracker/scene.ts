@@ -60,7 +60,7 @@ export function initScene(
 
   // Earth — wrapped in group for axial tilt (23.4°), nudged to clear trajectory
   const earthGroup = new THREE.Group();
-  earthGroup.position.set(-3.1, -10.8, -5.8);
+  earthGroup.position.set(0, 0, 0);
   earthGroup.rotation.z = 23.44 * Math.PI / 180;
 
   const texLoader = new THREE.TextureLoader();
@@ -88,8 +88,19 @@ export function initScene(
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
 
-  // Trajectory
-  const tPts = OEM.map(d => new THREE.Vector3(d[1] * KM2U, d[2] * KM2U, d[3] * KM2U));
+  // Trajectory — smooth with CatmullRom spline, clamp sub-surface points
+  const rawPts = OEM.map(d => {
+    const v = new THREE.Vector3(d[1] * KM2U, d[2] * KM2U, d[3] * KM2U);
+    const r = v.length();
+    if (r > 0 && r < EARTH_R) v.multiplyScalar(EARTH_R / r);
+    return v;
+  });
+  const spline = new THREE.CatmullRomCurve3(rawPts);
+  const tPts = spline.getPoints(rawPts.length * 4).map(v => {
+    const r = v.length();
+    if (r > 0 && r < EARTH_R) v.multiplyScalar(EARTH_R / r);
+    return v;
+  });
   fullTrajPts.current = tPts;
   const trajLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts), new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.3 }));
   sceneRoot.add(trajLine); objRef.current.trajLine = trajLine;
