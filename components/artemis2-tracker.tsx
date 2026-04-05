@@ -776,7 +776,8 @@ const ArtemisTracker3D: FC = () => {
       const mp = getMoonPosKm(t);
       moonOrbitPts.push(new THREE.Vector3(mp.x * KM2U, mp.y * KM2U, mp.z * KM2U));
     }
-    const moonOrbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(moonOrbitPts), new THREE.LineBasicMaterial({ color: 0x555566, transparent: true, opacity: 0.25 }));
+    const moonOrbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(moonOrbitPts), new THREE.LineDashedMaterial({ color: 0x6688aa, transparent: true, opacity: 0.5, dashSize: 2, gapSize: 1 }));
+    moonOrbit.computeLineDistances();
     scn.add(moonOrbit); objRef.current.moonOrbit = moonOrbit;
 
     // Orion spacecraft
