@@ -200,13 +200,12 @@ const ArtemisTracker3D: FC = () => {
       o.moon!.lookAt(0, 0, 0);
       o.moon!.rotateY(-Math.PI / 2);
 
-      // Update Moon shader light direction in world space
-      // The shader vertex shader transforms it to tangent space using normalMatrix
-      const moonShader = o.moon!.material;
-      if (moonShader && 'uniforms' in moonShader) {
-        const sunDir = sV.clone().sub(mV).normalize();
-        (moonShader as THREE.ShaderMaterial).uniforms.uLightDir.value.copy(sunDir);
-      }
+      // Update Moon shader light direction (disabled — using MeshPhong for now)
+      // const moonShader = o.moon!.material;
+      // if (moonShader && 'uniforms' in moonShader) {
+      //   const sunDir = sV.clone().sub(mV).normalize();
+      //   (moonShader as THREE.ShaderMaterial).uniforms.uLightDir.value.copy(sunDir);
+      // }
 
       // Solar corona — position at Moon, face camera along cam→Moon axis
       if (o.corona) {
