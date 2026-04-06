@@ -122,6 +122,7 @@ const ArtemisTracker3D: FC = () => {
     return () => { controlsCleanup(); sceneCleanup(); };
   }, [updCam]);
 
+
   // Render loop
   useEffect(() => {
     let raf: number;
@@ -151,6 +152,32 @@ const ArtemisTracker3D: FC = () => {
       // Tidal locking — near side always faces Earth (at origin)
       o.moon!.lookAt(0, 0, 0);
       o.moon!.rotateY(-Math.PI / 2);
+
+      // Solar corona — position at Moon, face camera along cam→Moon axis
+      if (o.corona) {
+        o.corona.position.copy(mV);
+
+        // Orient the corona plane to face the camera
+        // lookAt works in world space, so pass the camera's world position
+        const camWorld = camRef.current.position.clone();
+        o.corona.lookAt(camWorld);
+
+        // Alignment math in sceneRoot local space (where mV/sV live)
+        const camLocal = o.sceneRoot!.worldToLocal(camWorld.clone());
+        const camToMoon = mV.clone().sub(camLocal).normalize();
+        const camToSun = sV.clone().sub(camLocal).normalize();
+        const dot = camToMoon.dot(camToSun);
+
+        // Eclipse threshold — ramp up as alignment gets tighter
+        const tightAlign = Math.pow(Math.max(0, (dot - 0.98) / 0.02), 2.0);
+        const wideGlow = Math.pow(Math.max(0, (dot - 0.90) / 0.10), 4.0) * 0.15;
+        const alignment = Math.min(1, tightAlign + wideGlow);
+
+        const mat = o.corona.material as THREE.ShaderMaterial;
+        mat.uniforms.uAlignment.value = alignment;
+        mat.uniforms.uTime.value = performance.now() / 1000;
+        o.corona.visible = alignment > 0.001;
+      }
 
       // Earthshine — position light near Moon, offset toward Earth
       if (o.earthshine) {

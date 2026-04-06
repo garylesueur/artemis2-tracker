@@ -111,6 +111,104 @@ export function initScene(
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
 
+  // Solar corona — visible when Moon occults the Sun from camera's perspective
+  const coronaMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uAlignment: { value: 0.0 }, // 0 = no eclipse, 1 = perfect alignment
+      uTime: { value: 0.0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uAlignment;
+      uniform float uTime;
+      varying vec2 vUv;
+
+      // Simple noise for corona streamers
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+
+      void main() {
+        vec2 c = vUv * 2.0 - 1.0;
+        float r = length(c);
+        float angle = atan(c.y, c.x);
+
+        // Moon disc radius in UV space (~0.22 of the corona quad)
+        float moonR = 0.22;
+
+        // Discard inside the Moon silhouette (the Moon mesh itself renders on top)
+        if (r < moonR * 0.9) discard;
+
+        // Corona radial falloff — bright inner ring, fading outward
+        float inner = smoothstep(moonR * 0.85, moonR * 1.05, r); // fade in at Moon edge
+        float outer = 1.0 - smoothstep(moonR, 1.0, r);           // fade out toward edge
+        float corona = inner * outer;
+
+        // Asymmetric streamers — different lengths at different angles
+        float streamer = 0.0;
+        for (float i = 1.0; i <= 4.0; i++) {
+          float a = angle * i + uTime * 0.02 * i;
+          float n = noise(vec2(a * 2.0 + i * 10.0, r * 8.0 - uTime * 0.01));
+          streamer += n * (0.5 / i);
+        }
+        streamer = streamer * 0.6 + 0.4;
+
+        // Inner corona is white-hot, outer is reddish/gold
+        float t = smoothstep(moonR, 0.7, r);
+        vec3 innerCol = vec3(1.0, 0.98, 0.95);      // white
+        vec3 midCol = vec3(1.0, 0.85, 0.5);          // gold
+        vec3 outerCol = vec3(0.9, 0.4, 0.2);         // red
+        vec3 col = mix(innerCol, mix(midCol, outerCol, t), t);
+
+        // Prominence spikes — a few bright radial jets
+        float spikes = 0.0;
+        spikes += pow(max(0.0, cos(angle * 3.0 + 0.5)), 12.0) * 0.4;
+        spikes += pow(max(0.0, cos(angle * 5.0 - 1.2)), 16.0) * 0.3;
+        spikes += pow(max(0.0, cos(angle * 7.0 + 2.8)), 20.0) * 0.2;
+
+        float brightness = corona * streamer * (1.0 + spikes);
+
+        // Diamond ring effect right at the Moon's edge
+        float diamondRing = exp(-pow((r - moonR) * 15.0, 2.0)) * 2.0;
+        brightness += diamondRing;
+
+        // Modulate by alignment — fully visible only during eclipse geometry
+        float alpha = brightness * uAlignment * 1.2;
+        alpha = clamp(alpha, 0.0, 1.0);
+
+        // Boost color brightness for the diamond ring
+        col = mix(col, vec3(1.0), diamondRing * 0.5);
+
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+  });
+  // Quad sized ~4.5x Moon radius so streamers extend well beyond
+  const coronaGeo = new THREE.PlaneGeometry(MOON_R * 9, MOON_R * 9);
+  const corona = new THREE.Mesh(coronaGeo, coronaMat);
+  corona.renderOrder = -1; // render before Moon so Moon silhouette occludes it
+  sceneRoot.add(corona);
+  objRef.current.corona = corona;
+
   // Earthshine — faint blue light from Earth illuminating the Moon's dark side
   const earthshine = new THREE.PointLight(0x4466aa, 0.15, 0, 2);
   sceneRoot.add(earthshine);

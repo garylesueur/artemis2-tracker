@@ -35,6 +35,7 @@ export interface SceneObjects {
   moonlight?: THREE.PointLight;
   sceneRoot?: THREE.Group;
   userPin?: THREE.Group;
+  corona?: THREE.Mesh;
 }
 
 export interface CrewMember {
