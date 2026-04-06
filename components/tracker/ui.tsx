@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FC } from "react";
+import { useState, useEffect, useRef, forwardRef, type FC } from "react";
 import type { CamMode, CrewMember } from "./types";
 import { LAUNCH_UTC, FLYBY_UTC, SPLASHDOWN_UTC, MISSION_DUR } from "./data";
 import { fmtT, fmtD } from "./ephemeris";
@@ -313,7 +313,7 @@ const OBJECT_INFO: Record<string, { title: string; icon: string; color: string; 
   },
 };
 
-export const ObjectInfoPanel: FC<ObjectInfoPanelProps> = ({ name, dE, dM, speed, eNow, onClose }) => {
+export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(({ name, dE, dM, speed, eNow, onClose }, ref) => {
   const info = OBJECT_INFO[name];
   if (!info) return null;
 
@@ -334,8 +334,8 @@ export const ObjectInfoPanel: FC<ObjectInfoPanelProps> = ({ name, dE, dM, speed,
   }
 
   return (
-    <div style={{
-      position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)",
+    <div ref={ref} className="obj-info-panel" style={{
+      position: "absolute", left: -9999, top: -9999,
       background: "rgba(3,6,16,.92)", backdropFilter: "blur(12px)",
       border: `1px solid ${info.color}33`, borderRadius: 10,
       padding: "14px 18px", minWidth: 260, maxWidth: 340,
@@ -367,7 +367,7 @@ export const ObjectInfoPanel: FC<ObjectInfoPanelProps> = ({ name, dE, dM, speed,
       </div>
     </div>
   );
-};
+});
 
 interface CrewModalProps {
   crew: CrewMember[];

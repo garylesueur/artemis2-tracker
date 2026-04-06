@@ -28,6 +28,9 @@ const ArtemisTracker3D: FC = () => {
   const [userLoc, setUserLoc] = useState<{ lat: number; lon: number } | null>(null);
   const [selectedObj, setSelectedObj] = useState<string | null>(null);
   const selBoxRef = useRef<HTMLDivElement>(null);
+  const infoPanelRef = useRef<HTMLDivElement>(null);
+  const connectorRef = useRef<SVGLineElement>(null);
+  const connectorDotRef = useRef<SVGCircleElement>(null);
   const raycaster = useRef(new THREE.Raycaster());
 
   // Request geolocation once on mount
@@ -417,10 +420,55 @@ const ArtemisTracker3D: FC = () => {
             selBox.style.width = `${halfW * 2}px`;
             selBox.style.height = `${halfH * 2}px`;
             selBox.style.display = vc.z < 1 ? "" : "none";
+
+            // Position info panel near the object
+            const panel = infoPanelRef.current;
+            if (panel && vc.z < 1) {
+              const pw = panel.offsetWidth;
+              const ph = panel.offsetHeight;
+              const vw = canvasParent.clientWidth;
+              const vh = canvasParent.clientHeight;
+              const gap = 14;
+
+              // Try right of selection box, then left, then below
+              let pl = cx + halfW + gap;
+              let pt = cy - ph / 2;
+              let anchorX = cx + halfW;
+              let anchorY = cy;
+              if (pl + pw > vw - 10) { pl = cx - halfW - gap - pw; anchorX = cx - halfW; }
+              if (pl < 10) { pl = cx - pw / 2; pt = cy + halfH + gap; anchorX = cx; anchorY = cy + halfH; }
+              pl = Math.max(10, Math.min(vw - pw - 10, pl));
+              pt = Math.max(10, Math.min(vh - ph - 10, pt));
+
+              panel.style.left = `${pl}px`;
+              panel.style.top = `${pt}px`;
+
+              // Connector line from selection box edge to panel edge
+              const line = connectorRef.current;
+              const dot = connectorDotRef.current;
+              if (line && dot) {
+                const pcx = pl + pw / 2, pcy = pt + ph / 2;
+                const dx = anchorX - pcx, dy = anchorY - pcy;
+                const angle = Math.atan2(dy, dx);
+                const cosA = Math.cos(angle), sinA = Math.sin(angle);
+                const ex = pcx + cosA * Math.min(pw / 2, Math.abs(cosA) > 0.001 ? Math.abs(pw / 2 / cosA) : pw / 2);
+                const ey = pcy + sinA * Math.min(ph / 2, Math.abs(sinA) > 0.001 ? Math.abs(ph / 2 / sinA) : ph / 2);
+                line.setAttribute("x1", String(anchorX));
+                line.setAttribute("y1", String(anchorY));
+                line.setAttribute("x2", String(ex));
+                line.setAttribute("y2", String(ey));
+                dot.setAttribute("cx", String(anchorX));
+                dot.setAttribute("cy", String(anchorY));
+                line.style.display = "";
+                dot.style.display = "";
+              }
+            }
           }
         }
       } else if (selBox) {
         selBox.style.display = "none";
+        if (connectorRef.current) connectorRef.current.style.display = "none";
+        if (connectorDotRef.current) connectorDotRef.current.style.display = "none";
       }
 
       renRef.current.render(scnRef.current, camRef.current);
@@ -444,9 +492,15 @@ const ArtemisTracker3D: FC = () => {
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }} />
         <div ref={lblRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "hidden" }} />
-        {/* Selection box — corner brackets around clicked object */}
+        {/* Selection box */}
         <div ref={selBoxRef} style={{ position: "absolute", display: "none", pointerEvents: "none", border: "1px solid rgba(234,179,8,0.5)", borderRadius: 4, animation: "sel-pulse 2s ease-in-out infinite" }} />
-        {selectedObj && <ObjectInfoPanel name={selectedObj} dE={dE} dM={dM} speed={spd} eNow={eNow} onClose={() => setSelectedObj(null)} />}
+        {/* Connector line */}
+        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 9 }}>
+          <line ref={connectorRef} style={{ display: "none" }} stroke="#eab308" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />
+          <circle ref={connectorDotRef} style={{ display: "none" }} r={3} fill="#eab308" fillOpacity={0.5} />
+        </svg>
+        {/* Object info panel — positioned by render loop */}
+        {selectedObj && <ObjectInfoPanel ref={infoPanelRef} name={selectedObj} dE={dE} dM={dM} speed={spd} eNow={eNow} onClose={() => setSelectedObj(null)} />}
         <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN · CLICK SELECT</div>
 
         <CameraControls
