@@ -31,6 +31,7 @@ export interface SceneObjects {
   sun?: THREE.Mesh;
   sunLight?: THREE.DirectionalLight;
   sceneRoot?: THREE.Group;
+  userPin?: THREE.Group;
 }
 
 export interface CrewMember {

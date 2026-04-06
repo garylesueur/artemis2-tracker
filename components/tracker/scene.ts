@@ -58,22 +58,35 @@ export function initScene(
   };
   makeStars(800, 1, 1800); makeStars(300, 1.5, 1800); makeStars(50, 2.5, 1800);
 
-  // Earth — wrapped in group for axial tilt (23.4°), nudged to clear trajectory
+  // Earth — geometry rotated so north (+Y in Three.js) aligns with +Z (celestial north in EME2000)
+  // No group tilt needed — EME2000 is already Earth-equatorial
   const earthGroup = new THREE.Group();
   earthGroup.position.set(0, 0, 0);
-  earthGroup.rotation.z = 23.44 * Math.PI / 180;
 
   const texLoader = new THREE.TextureLoader();
   const earthMat = new THREE.MeshPhongMaterial({ specular: 0x334455, shininess: 25 });
   texLoader.load("/earth-color.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; earthMat.map = tex; earthMat.needsUpdate = true; });
   texLoader.load("/earth-bump.jpg", (tex) => { earthMat.bumpMap = tex; earthMat.bumpScale = 0.05; earthMat.needsUpdate = true; });
-  const earth = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 64), earthMat);
+  const earthGeo = new THREE.SphereGeometry(EARTH_R, 64, 64);
+  earthGeo.rotateX(Math.PI / 2);
+  const earth = new THREE.Mesh(earthGeo, earthMat);
   earthGroup.add(earth); objRef.current.earth = earth;
+
+  // User location pin — positioned when geolocation is available
+  const pinGroup = new THREE.Group();
+  const pinHead = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 0.02, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff4444 }));
+  const pinGlow = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 0.04, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.3 }));
+  pinGroup.add(pinHead, pinGlow);
+  pinGroup.visible = false;
+  earth.add(pinGroup);
+  objRef.current.userPin = pinGroup;
 
   // Clouds — separate sphere with real cloud texture, rotates independently
   const cloudMat = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.4, depthWrite: false });
   texLoader.load("/earth-clouds.jpg", (tex) => { cloudMat.map = tex; cloudMat.needsUpdate = true; });
-  const clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 1.008, 48, 48), cloudMat);
+  const cloudGeo = new THREE.SphereGeometry(EARTH_R * 1.008, 48, 48);
+  cloudGeo.rotateX(Math.PI / 2);
+  const clouds = new THREE.Mesh(cloudGeo, cloudMat);
   earthGroup.add(clouds); objRef.current.clouds = clouds;
 
   // Atmosphere

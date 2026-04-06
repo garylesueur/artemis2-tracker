@@ -25,6 +25,17 @@ const ArtemisTracker3D: FC = () => {
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showMoonOrbit, setShowMoonOrbit] = useState(true);
   const [showCrew, setShowCrew] = useState(false);
+  const [userLoc, setUserLoc] = useState<{ lat: number; lon: number } | null>(null);
+
+  // Request geolocation once on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => {}, // silently ignore denial
+      );
+    }
+  }, []);
 
   const eNow = live ? now : (tOver ?? now);
   const met = eNow - LAUNCH_UTC;
@@ -217,8 +228,21 @@ const ArtemisTracker3D: FC = () => {
       const J2000 = Date.UTC(2000, 0, 1, 12, 0, 0);
       const secSinceJ2000 = (eNow - J2000) / 1000;
       const earthAngle = (280.46 + (secSinceJ2000 / SIDEREAL_DAY) * 360) * Math.PI / 180;
-      if (o.earth) o.earth.rotation.y = earthAngle;
-      if (o.clouds) o.clouds.rotation.y = earthAngle * 0.97;
+      if (o.earth) o.earth.rotation.z = earthAngle;
+      if (o.clouds) o.clouds.rotation.z = earthAngle * 0.97;
+
+      // User location pin on Earth
+      if (o.userPin && userLoc && !o.userPin.visible) {
+        const EARTH_R_L = 6371 * KM2U;
+        const latR = userLoc.lat * Math.PI / 180;
+        const lonR = userLoc.lon * Math.PI / 180;
+        o.userPin.position.set(
+          EARTH_R_L * Math.cos(latR) * Math.cos(lonR),
+          EARTH_R_L * Math.cos(latR) * Math.sin(lonR),
+          EARTH_R_L * Math.sin(latR),
+        );
+        o.userPin.visible = true;
+      }
 
       // Screen-space labels
       const container = lblRef.current;
@@ -262,6 +286,7 @@ const ArtemisTracker3D: FC = () => {
     };
     tick();
     return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen]);
 
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
