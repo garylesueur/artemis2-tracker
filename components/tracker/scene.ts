@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { SceneObjects } from "./types";
-import { OEM, EARTH_R, MOON_R, KM2U, LAUNCH_UTC } from "./data";
+import { OEM, EARTH_R, MOON_R, KM2U, LAUNCH_UTC, MOON_POIS } from "./data";
 import { getMoonPosKm } from "./ephemeris";
 
 export function initScene(
@@ -16,11 +16,26 @@ export function initScene(
   const scn = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(50, 2, 0.1, 50000);
 
-  // Root group — rotates the whole scene so the orbital plane lies flat in XZ
-  // Orbital plane normal (from trajectory PCA): (-0.17, 0.52, -0.84)
+  // Root group — rotates the whole scene so the Moon's orbital plane lies flat in XZ
+  // Build rotation from two axes: Y = orbital normal, Z = Moon direction at launch
   const sceneRoot = new THREE.Group();
-  const orbitalNormal = new THREE.Vector3(0.1703, -0.5232, 0.8350).normalize();
-  sceneRoot.quaternion.setFromUnitVectors(orbitalNormal, new THREE.Vector3(0, 1, 0));
+  const orbPeriod = 27.3 * 86400000;
+  const mp0 = getMoonPosKm(LAUNCH_UTC);
+  const mp1 = getMoonPosKm(LAUNCH_UTC + orbPeriod * 0.33);
+  const mp2 = getMoonPosKm(LAUNCH_UTC + orbPeriod * 0.67);
+  const yAxis = new THREE.Vector3()
+    .crossVectors(
+      new THREE.Vector3(mp1.x - mp0.x, mp1.y - mp0.y, mp1.z - mp0.z),
+      new THREE.Vector3(mp2.x - mp0.x, mp2.y - mp0.y, mp2.z - mp0.z),
+    )
+    .normalize();
+  if (yAxis.y > 0) yAxis.negate();
+  const moonDir = new THREE.Vector3(mp0.x, mp0.y, mp0.z).normalize();
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, moonDir).normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
+  sceneRoot.quaternion.setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis).transpose(),
+  );
   scn.add(sceneRoot);
 
   // Lighting
@@ -213,13 +228,178 @@ export function initScene(
   ([1.05, 1.1, 1.18] as const).forEach((s, i) => earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * s, 48, 48), new THREE.MeshBasicMaterial({ color: [0x4499ff, 0x3377dd, 0x2255aa][i], transparent: true, opacity: [0.07, 0.035, 0.015][i], side: THREE.BackSide }))));
   sceneRoot.add(earthGroup);
 
-  // Moon — POM shader is in git history (commit 548e6a1) if needed
-  const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5 });
+  // Moon — custom shader with parallax occlusion mapping and self-shadowing
+  const moonMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColorMap: { value: null as THREE.Texture | null },
+      uHeightMap: { value: null as THREE.Texture | null },
+      uLightDir: { value: new THREE.Vector3(1, 0, 0) },
+      uHeightScale: { value: 0.003 },
+      uAmbient: { value: 0.06 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying mat3 vTBN;
+
+      void main() {
+        vUv = uv;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        vNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+
+        // Tangent frame in world space from geometry normal
+        vec3 n = vNormal;
+        vec3 t = normalize(cross(n, vec3(0.0, 1.0, 0.0)));
+        if (length(cross(n, vec3(0.0, 1.0, 0.0))) < 0.01) {
+          t = normalize(cross(n, vec3(1.0, 0.0, 0.0)));
+        }
+        vec3 b = normalize(cross(n, t));
+        vTBN = mat3(t, b, n);
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uColorMap;
+      uniform sampler2D uHeightMap;
+      uniform vec3 uLightDir;    // world-space direction TO the sun
+      uniform float uHeightScale;
+      uniform float uAmbient;
+
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying mat3 vTBN;
+
+      // World to tangent space
+      vec3 toTangentSpace(vec3 dir) {
+        return dir * vTBN; // transpose(TBN) * dir
+      }
+
+      // Self-shadow — trace toward light in UV space
+      float selfShadow(vec2 uv, vec3 lightTS) {
+        if (lightTS.z <= 0.0) return 0.0;
+
+        const int steps = 10;
+        float stepDepth = 1.0 / float(steps);
+        vec2 deltaUV = lightTS.xy / lightTS.z * uHeightScale / float(steps);
+
+        float surfaceH = 1.0 - texture2D(uHeightMap, uv).r;
+        float currentDepth = surfaceH;
+
+        for (int i = 0; i < steps; i++) {
+          uv += deltaUV;
+          currentDepth -= stepDepth;
+          float h = 1.0 - texture2D(uHeightMap, uv).r;
+          if (h > currentDepth) {
+            float block = (h - currentDepth) * 2.5;
+            return 1.0 - clamp(block, 0.0, 0.25);
+          }
+        }
+        return 1.0;
+      }
+
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 viewTS = normalize(toTangentSpace(viewDir));
+        vec3 lightTS = normalize(toTangentSpace(uLightDir));
+
+        // Parallax occlusion — step through heightmap layers
+        const int numLayers = 12;
+        float layerD = 1.0 / float(numLayers);
+        float depth = 0.0;
+        vec2 delta = -viewTS.xy / viewTS.z * uHeightScale / float(numLayers);
+        vec2 curUV = vUv;
+        float curH = 1.0 - texture2D(uHeightMap, curUV).r;
+
+        for (int i = 0; i < numLayers; i++) {
+          if (depth >= curH) break;
+          curUV += delta;
+          curH = 1.0 - texture2D(uHeightMap, curUV).r;
+          depth += layerD;
+        }
+        // Refine with interpolation
+        vec2 prevUV = curUV - delta;
+        float prevH = 1.0 - texture2D(uHeightMap, prevUV).r;
+        float prevD = depth - layerD;
+        float w = (curH - depth) / ((curH - depth) - (prevH - prevD));
+        vec2 pUv = mix(curUV, prevUV, w);
+
+        // Colour
+        vec4 color = texture2D(uColorMap, pUv);
+
+        // Normal from heightmap (central differences)
+        float tx = 1.0 / 2048.0;
+        float hL = texture2D(uHeightMap, pUv + vec2(-tx, 0.0)).r;
+        float hR = texture2D(uHeightMap, pUv + vec2(tx, 0.0)).r;
+        float hD = texture2D(uHeightMap, pUv + vec2(0.0, -tx)).r;
+        float hU = texture2D(uHeightMap, pUv + vec2(0.0, tx)).r;
+        // Diffuse in tangent space with bump normals
+        vec3 bumpN = normalize(vec3((hL - hR) * 1.0, (hD - hU) * 1.0, 1.0));
+        float NdotL = max(dot(bumpN, lightTS), 0.0);
+        float flatNdotL = max(lightTS.z, 0.0);
+        NdotL = max(NdotL, flatNdotL * 0.4);
+
+        // Final lighting
+        float diffuse = NdotL * 2.0;
+        float lit = uAmbient + diffuse;
+        lit = min(lit, 1.5);
+
+        // Subtle blue tint in shadow (earthshine)
+        vec3 tint = mix(vec3(0.7, 0.75, 0.88), vec3(1.0), smoothstep(0.0, 0.2, diffuse));
+
+        // Lift dark texture values — sRGB linearization crushes dark mare regions
+        vec3 lifted = mix(color.rgb, sqrt(color.rgb), 0.3);
+        gl_FragColor = vec4(lifted * lit * tint, 1.0);
+      }
+    `,
+  });
   const moonTexLoader = new THREE.TextureLoader();
-  moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
-  moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.06; moonMat.needsUpdate = true; });
+  moonTexLoader.load("/moon-color.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; moonMat.uniforms.uColorMap.value = tex; moonMat.needsUpdate = true; });
+  moonTexLoader.load("/moon-bump.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; moonMat.uniforms.uHeightMap.value = tex; moonMat.needsUpdate = true; });
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
+
+  // Moon POIs — small translucent pins at notable locations
+  const poiGroup = new THREE.Group();
+  const poiMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.7 });
+  const pinHeight = MOON_R * 0.06;
+  const pinRadius = MOON_R * 0.004;
+  const tipRadius = MOON_R * 0.01;
+  const pinGeo = new THREE.CylinderGeometry(pinRadius, pinRadius, pinHeight, 6);
+  pinGeo.translate(0, pinHeight / 2, 0); // base at origin, extends upward
+  const tipGeo = new THREE.SphereGeometry(tipRadius, 8, 8);
+  tipGeo.translate(0, pinHeight, 0); // tip at top of pin
+  const hitGeo = new THREE.CylinderGeometry(MOON_R * 0.025, MOON_R * 0.025, pinHeight * 1.2, 6);
+  hitGeo.translate(0, pinHeight * 0.5, 0);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  for (const poi of MOON_POIS) {
+    const pin = new THREE.Group();
+    pin.add(new THREE.Mesh(pinGeo, poiMat));
+    pin.add(new THREE.Mesh(tipGeo, poiMat));
+    pin.add(new THREE.Mesh(hitGeo, hitMat)); // invisible click target
+    const latR = poi.lat * Math.PI / 180;
+    const lonR = poi.lon * Math.PI / 180;
+    const r = MOON_R * 1.002;
+    // Store local-space offset and surface normal for render-loop positioning
+    const surfaceDir = new THREE.Vector3(
+      Math.cos(latR) * Math.cos(lonR),
+      Math.sin(latR),
+      -Math.cos(latR) * Math.sin(lonR),
+    ).normalize();
+    // Orient pin to point radially outward — rotate from default Y-up to surface normal
+    const up = new THREE.Vector3(0, 1, 0);
+    pin.quaternion.setFromUnitVectors(up, surfaceDir);
+    pin.userData.poiName = poi.name;
+    pin.userData.localOffset = surfaceDir.clone().multiplyScalar(r);
+    pin.userData.localQuat = pin.quaternion.clone();
+    poiGroup.add(pin);
+  }
+  sceneRoot.add(poiGroup);
+  poiGroup.visible = false;
+  objRef.current.moonPois = poiGroup;
 
   // Solar corona — visible when Moon occults the Sun from camera's perspective
   const coronaMat = new THREE.ShaderMaterial({

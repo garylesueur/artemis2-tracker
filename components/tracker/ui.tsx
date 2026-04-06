@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, forwardRef, type FC } from "react";
 import type { CamMode, CrewMember } from "./types";
-import { LAUNCH_UTC, FLYBY_UTC, SPLASHDOWN_UTC, MISSION_DUR } from "./data";
+import { LAUNCH_UTC, FLYBY_UTC, SPLASHDOWN_UTC, MISSION_DUR, type MoonPoi } from "./data";
 import { fmtT, fmtD } from "./ephemeris";
 
 export const GLOBAL_STYLES = `
@@ -365,6 +365,31 @@ export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(
           <div key={i} style={{ fontSize: 9, color: "#8a9bb2", lineHeight: 1.6 }}>{f}</div>
         ))}
       </div>
+    </div>
+  );
+});
+
+// POI Info Panel — shown when a Moon POI dot is clicked
+interface PoiInfoPanelProps {
+  poi: MoonPoi;
+  onClose: () => void;
+}
+
+export const PoiInfoPanel = forwardRef<HTMLDivElement, PoiInfoPanelProps>(({ poi, onClose }, ref) => {
+  const color = poi.type === "Landing Site" ? "#00ffcc" : poi.type === "Artemis Target" ? "#eab308" : "#88aacc";
+  return (
+    <div ref={ref} style={{
+      position: "absolute", left: -9999, top: -9999,
+      background: "rgba(3,6,16,.92)", backdropFilter: "blur(12px)",
+      border: `1px solid ${color}44`, borderRadius: 8,
+      padding: "12px 16px", minWidth: 220, maxWidth: 300,
+      fontFamily: "inherit", zIndex: 11,
+      boxShadow: `0 0 24px ${color}20`,
+    }}>
+      <button onClick={onClose} style={{ position: "absolute", top: 6, right: 8, background: "none", border: "none", color: "#5a6a80", fontSize: 13, cursor: "pointer", padding: "2px 6px", lineHeight: 1 }}>✕</button>
+      <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 700, color, letterSpacing: "1px", marginBottom: 2 }}>{poi.name}</div>
+      <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: ".5px", marginBottom: 8 }}>{poi.type} · {poi.lat.toFixed(2)}°{poi.lat >= 0 ? "N" : "S"}, {Math.abs(poi.lon).toFixed(2)}°{poi.lon >= 0 ? "E" : "W"}</div>
+      <div style={{ fontSize: 10, color: "#a0b0c4", lineHeight: 1.6 }}>{poi.detail}</div>
     </div>
   );
 });
