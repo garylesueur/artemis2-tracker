@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import * as THREE from "three";
 import type { CamMode, OrbitControls, SceneObjects } from "./tracker/types";
-import { OEM, LAUNCH_UTC, SPLASHDOWN_UTC, MISSION_DUR, DATA_START, DATA_END, KM2U, MOON_R, CREW } from "./tracker/data";
+import { OEM, LAUNCH_UTC, SPLASHDOWN_UTC, MISSION_DUR, DATA_START, DATA_END, KM2U, MOON_R, EARTH_R, CREW } from "./tracker/data";
 import { getMoonPosKm, getSunPosKm, interpOEM, fmtT, getSpeedKmS } from "./tracker/ephemeris";
 import { initScene, setupControls } from "./tracker/scene";
-import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal } from "./tracker/ui";
+import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal, ObjectInfoPanel } from "./tracker/ui";
 
 const ArtemisTracker3D: FC = () => {
   const cvRef = useRef<HTMLCanvasElement>(null);
@@ -26,6 +26,9 @@ const ArtemisTracker3D: FC = () => {
   const [showMoonOrbit, setShowMoonOrbit] = useState(true);
   const [showCrew, setShowCrew] = useState(false);
   const [userLoc, setUserLoc] = useState<{ lat: number; lon: number } | null>(null);
+  const [selectedObj, setSelectedObj] = useState<string | null>(null);
+  const selBoxRef = useRef<HTMLDivElement>(null);
+  const raycaster = useRef(new THREE.Raycaster());
 
   // Request geolocation once on mount
   useEffect(() => {
@@ -119,7 +122,42 @@ const ArtemisTracker3D: FC = () => {
 
     const controlsCleanup = setupControls(cv, ctl, camRef, updCam);
 
-    return () => { controlsCleanup(); sceneCleanup(); };
+    // Click-to-select — raycast against Earth, Moon, Sun, Orion
+    let clickStart = { x: 0, y: 0 };
+    const onDown = (e: MouseEvent) => { clickStart = { x: e.clientX, y: e.clientY }; };
+    cv.addEventListener("mousedown", onDown);
+    const onCanvasClick = (e: MouseEvent) => {
+      // Ignore if we've been dragging
+      if (Math.abs(e.clientX - clickStart.x) > 5 || Math.abs(e.clientY - clickStart.y) > 5) return;
+      const cam = camRef.current;
+      if (!cam || !scnRef.current) return;
+      const rect = cv.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.current.setFromCamera(mouse, cam);
+      const o = objRef.current;
+      const targets: { name: string; obj: THREE.Object3D }[] = [];
+      if (o.earth) targets.push({ name: "earth", obj: o.earth });
+      if (o.moon) targets.push({ name: "moon", obj: o.moon });
+      if (o.sun) targets.push({ name: "sun", obj: o.sun });
+      if (o.orion) targets.push({ name: "orion", obj: o.orion });
+      const meshes = targets.map(t => t.obj);
+      const hits = raycaster.current.intersectObjects(meshes, true);
+      if (hits.length > 0) {
+        const hitObj = hits[0].object;
+        const match = targets.find(t => t.obj === hitObj || hitObj.parent === t.obj || hitObj.parent?.parent === t.obj);
+        if (match) {
+          setSelectedObj(prev => prev === match.name ? null : match.name);
+          return;
+        }
+      }
+      setSelectedObj(null);
+    };
+    cv.addEventListener("click", onCanvasClick);
+
+    return () => { cv.removeEventListener("mousedown", onDown); cv.removeEventListener("click", onCanvasClick); controlsCleanup(); sceneCleanup(); };
   }, [updCam]);
 
 
@@ -338,12 +376,59 @@ const ArtemisTracker3D: FC = () => {
         container.style.display = "none";
       }
 
+      // Selection box around selected object
+      const selBox = selBoxRef.current;
+      if (selBox && selectedObj) {
+        const cam = camRef.current;
+        const canvasParent = cvRef.current?.parentElement;
+        if (cam && canvasParent) {
+          let worldPos: THREE.Vector3 | null = null;
+          let worldRadius = 0;
+          if (selectedObj === "earth" && o.earth) { worldPos = o.earth.getWorldPosition(new THREE.Vector3()); worldRadius = EARTH_R; }
+          else if (selectedObj === "moon" && o.moon) { worldPos = o.moon.getWorldPosition(new THREE.Vector3()); worldRadius = MOON_R; }
+          else if (selectedObj === "sun" && o.sun) { worldPos = o.sun.getWorldPosition(new THREE.Vector3()); worldRadius = 696000 * KM2U; }
+          else if (selectedObj === "orion" && o.orion) { worldPos = oWorld.clone(); worldRadius = orionScale * 1.5; }
+
+          if (worldPos) {
+            const hw = canvasParent.clientWidth / 2;
+            const hh = canvasParent.clientHeight / 2;
+            // Project center and offset points to get screen-space bounding box
+            const vc = worldPos.clone().project(cam);
+            const cx = vc.x * hw + hw;
+            const cy = -vc.y * hh + hh;
+
+            // Project points at the edges of the object sphere
+            const right = worldPos.clone();
+            const camRight = new THREE.Vector3(); cam.getWorldDirection(camRight);
+            const upDir = new THREE.Vector3(0, 1, 0);
+            const rightDir = new THREE.Vector3().crossVectors(camRight, upDir).normalize();
+            const upPerp = new THREE.Vector3().crossVectors(rightDir, camRight).normalize();
+
+            const rProj = worldPos.clone().add(rightDir.clone().multiplyScalar(worldRadius)).project(cam);
+            const tProj = worldPos.clone().add(upPerp.clone().multiplyScalar(worldRadius)).project(cam);
+            const rScreen = Math.abs((rProj.x * hw + hw) - cx);
+            const tScreen = Math.abs((-tProj.y * hh + hh) - cy);
+            const pad = 12;
+            const halfW = Math.max(rScreen, 20) + pad;
+            const halfH = Math.max(tScreen, 20) + pad;
+
+            selBox.style.left = `${cx - halfW}px`;
+            selBox.style.top = `${cy - halfH}px`;
+            selBox.style.width = `${halfW * 2}px`;
+            selBox.style.height = `${halfH * 2}px`;
+            selBox.style.display = vc.z < 1 ? "" : "none";
+          }
+        }
+      } else if (selBox) {
+        selBox.style.display = "none";
+      }
+
       renRef.current.render(scnRef.current, camRef.current);
     };
     tick();
     return () => cancelAnimationFrame(raf);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen]);
+  }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen, selectedObj]);
 
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
 
@@ -359,7 +444,10 @@ const ArtemisTracker3D: FC = () => {
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }} />
         <div ref={lblRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "hidden" }} />
-        <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN</div>
+        {/* Selection box — corner brackets around clicked object */}
+        <div ref={selBoxRef} style={{ position: "absolute", display: "none", pointerEvents: "none", border: "1px solid rgba(234,179,8,0.5)", borderRadius: 4, animation: "sel-pulse 2s ease-in-out infinite" }} />
+        {selectedObj && <ObjectInfoPanel name={selectedObj} dE={dE} dM={dM} speed={spd} eNow={eNow} onClose={() => setSelectedObj(null)} />}
+        <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN · CLICK SELECT</div>
 
         <CameraControls
           camMode={camMode}

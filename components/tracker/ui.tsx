@@ -15,6 +15,7 @@ export const GLOBAL_STYLES = `
   input[type=range]::-moz-range-track{height:3px;background:linear-gradient(90deg,#1e40af,#eab308);border-radius:2px;opacity:.5}
   input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#eab308;border:2px solid #030610}
   button{font-family:inherit;cursor:pointer}
+  @keyframes sel-pulse{0%,100%{opacity:.5;box-shadow:0 0 12px rgba(234,179,8,.15)}50%{opacity:.9;box-shadow:0 0 20px rgba(234,179,8,.3)}}
   .hdr-phase-mobile{display:none}
   .cam-btn .cam-label{white-space:nowrap}
   @media(max-width:768px){
@@ -38,6 +39,7 @@ export const GLOBAL_STYLES = `
     .dist-panel{padding:6px 10px!important}
     .dist-val{font-size:14px!important}
     .hint-text{display:none!important}
+    .obj-info-panel{min-width:220!important;max-width:280px!important;padding:10px 14px!important}
     .bottom-bar{display:none!important}
     .sc{padding:6px 10px!important}
     .bottom-flyby,.bottom-splash{display:none!important}
@@ -242,6 +244,130 @@ export const BottomBar: FC<BottomBarProps> = ({ mf, eNow, crew, onCrewClick }) =
     </div>
   </div>
 );
+
+interface ObjectInfoPanelProps {
+  name: string;
+  dE: number;
+  dM: number;
+  speed: number;
+  eNow: number;
+  onClose: () => void;
+}
+
+const OBJECT_INFO: Record<string, { title: string; icon: string; color: string; type: string; facts: string[] }> = {
+  earth: {
+    title: "EARTH",
+    icon: "🌍",
+    color: "#4499dd",
+    type: "Terrestrial Planet",
+    facts: [
+      "Diameter: 12,742 km",
+      "Mass: 5.972 × 10²⁴ kg",
+      "Rotation: 23h 56m 4s",
+      "Axial tilt: 23.44°",
+      "Surface temp: −89 to 57°C",
+      "Atmosphere: N₂ 78%, O₂ 21%",
+    ],
+  },
+  moon: {
+    title: "MOON",
+    icon: "🌑",
+    color: "#999999",
+    type: "Natural Satellite",
+    facts: [
+      "Diameter: 3,474 km",
+      "Mass: 7.342 × 10²² kg",
+      "Orbital period: 27.3 days",
+      "Distance from Earth: ~384,400 km",
+      "Surface gravity: 1.62 m/s²",
+      "Tidally locked to Earth",
+    ],
+  },
+  sun: {
+    title: "SUN",
+    icon: "☀️",
+    color: "#ffdd44",
+    type: "G-type Main-Sequence Star",
+    facts: [
+      "Diameter: 1,392,700 km",
+      "Mass: 1.989 × 10³⁰ kg",
+      "Surface temp: 5,778 K",
+      "Core temp: ~15.7 million K",
+      "Age: ~4.6 billion years",
+      "Luminosity: 3.828 × 10²⁶ W",
+    ],
+  },
+  orion: {
+    title: "ORION MPCV",
+    icon: "🚀",
+    color: "#ffcc22",
+    type: "Crew Vehicle — Artemis II",
+    facts: [
+      "Crew module: 5.02m diameter",
+      "Mass: ~26,500 kg (crewed)",
+      "Service module: ESA-built",
+      "Solar array span: 19m",
+      "Crew capacity: 4 astronauts",
+      "Heat shield: 5m AVCOAT",
+    ],
+  },
+};
+
+export const ObjectInfoPanel: FC<ObjectInfoPanelProps> = ({ name, dE, dM, speed, eNow, onClose }) => {
+  const info = OBJECT_INFO[name];
+  if (!info) return null;
+
+  // Dynamic stats based on object
+  const dynStats: { label: string; value: string }[] = [];
+  if (name === "orion") {
+    dynStats.push({ label: "FROM EARTH", value: `${Math.round(dE).toLocaleString()} km` });
+    dynStats.push({ label: "FROM MOON", value: `${Math.round(dM).toLocaleString()} km` });
+    dynStats.push({ label: "VELOCITY", value: `${(speed * 3600).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} km/h` });
+  } else if (name === "moon") {
+    dynStats.push({ label: "FROM EARTH", value: `${(384400).toLocaleString()} km` });
+    dynStats.push({ label: "ORION DIST", value: `${Math.round(dM).toLocaleString()} km` });
+  } else if (name === "earth") {
+    dynStats.push({ label: "ORION DIST", value: `${Math.round(dE).toLocaleString()} km` });
+  } else if (name === "sun") {
+    dynStats.push({ label: "FROM EARTH", value: "149.6M km" });
+    dynStats.push({ label: "LIGHT DELAY", value: "~8 min 20 sec" });
+  }
+
+  return (
+    <div style={{
+      position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)",
+      background: "rgba(3,6,16,.92)", backdropFilter: "blur(12px)",
+      border: `1px solid ${info.color}33`, borderRadius: 10,
+      padding: "14px 18px", minWidth: 260, maxWidth: 340,
+      fontFamily: "inherit", zIndex: 10,
+      boxShadow: `0 0 30px ${info.color}15`,
+    }}>
+      <button onClick={onClose} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", color: "#5a6a80", fontSize: 14, cursor: "pointer", padding: "2px 6px", lineHeight: 1 }}>✕</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <span style={{ fontSize: 22 }}>{info.icon}</span>
+        <div>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, fontWeight: 700, color: info.color, letterSpacing: "1px" }}>{info.title}</div>
+          <div style={{ fontSize: 9, color: "#7b8da4", letterSpacing: ".5px", marginTop: 1 }}>{info.type}</div>
+        </div>
+      </div>
+      {dynStats.length > 0 && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 10, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,.06)", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+          {dynStats.map(s => (
+            <div key={s.label} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontVariantNumeric: "tabular-nums" }}>{s.value}</div>
+              <div style={{ fontSize: 7, color: "#5a6a80", letterSpacing: "1px", marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 14px" }}>
+        {info.facts.map((f, i) => (
+          <div key={i} style={{ fontSize: 9, color: "#8a9bb2", lineHeight: 1.6 }}>{f}</div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 interface CrewModalProps {
   crew: CrewMember[];
