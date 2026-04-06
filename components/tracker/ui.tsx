@@ -26,8 +26,7 @@ export const GLOBAL_STYLES = `
     .hdr-met{font-size:15px!important}
     .hdr-phase{display:none!important}
     .hdr-phase-mobile{display:inline-block!important}
-    .transport-bar{order:99!important;border-top:1px solid rgba(255,255,255,.15)!important;border-bottom:none!important;padding:6px 10px!important;gap:6px!important;flex-wrap:nowrap!important}
-    .transport-bar input[type=range]{height:32px!important}
+    .transport-bar{order:99!important;border-top:1px solid rgba(255,255,255,.15)!important;border-bottom:none!important;padding:6px 10px!important}
     .transport-bar input[type=range]::-webkit-slider-thumb{width:22px!important;height:22px!important;margin-top:-10px!important}
     .transport-bar input[type=range]::-moz-range-thumb{width:22px!important;height:22px!important}
     .cam-panel{top:auto!important;bottom:8px!important}
@@ -84,13 +83,15 @@ interface TransportProps {
 }
 
 export const Transport: FC<TransportProps> = ({ live, speed, eNow, onSpeedClick, onLive, onSlide }) => (
-  <div className="transport-bar" style={{ padding: "6px 20px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid rgba(255,255,255,.08)", flexShrink: 0, flexWrap: "wrap" }}>
-    {([{ l: "⏪", s: -80000 }, { l: "◁", s: -15000 }, { l: "⏸", s: 0 }, { l: "▷", s: 15000 }, { l: "⏩", s: 80000 }] as const).map(b => (
-      <button key={b.l} onClick={() => onSpeedClick(b.s)}
-        style={{ background: !live && speed === b.s ? "rgba(234,179,8,.15)" : "rgba(255,255,255,.05)", border: !live && speed === b.s ? "1px solid rgba(234,179,8,.3)" : "1px solid rgba(255,255,255,.1)", color: !live && speed === b.s ? "#eab308" : "#8a9bb2", borderRadius: 5, padding: "4px 10px", fontSize: 14 }}>{b.l}</button>
-    ))}
-    <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
-    <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ flex: 1, minWidth: 120 }} />
+  <div className="transport-bar" style={{ padding: "6px 20px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid rgba(255,255,255,.08)", flexShrink: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {([{ l: "⏪", s: -80000 }, { l: "◁", s: -15000 }, { l: "⏸", s: 0 }, { l: "▷", s: 15000 }, { l: "⏩", s: 80000 }] as const).map(b => (
+        <button key={b.l} onClick={() => onSpeedClick(b.s)}
+          style={{ background: !live && speed === b.s ? "rgba(234,179,8,.15)" : "rgba(255,255,255,.05)", border: !live && speed === b.s ? "1px solid rgba(234,179,8,.3)" : "1px solid rgba(255,255,255,.1)", color: !live && speed === b.s ? "#eab308" : "#8a9bb2", borderRadius: 5, padding: "4px 10px", fontSize: 14 }}>{b.l}</button>
+      ))}
+      <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
+    </div>
+    <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ width: "100%", height: 32 }} />
   </div>
 );
 
@@ -150,7 +151,8 @@ interface DistancePanelsProps {
 
 export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow, speed }) => {
   const [utc, setUtc] = useState(false);
-  const [speedUnit, setSpeedUnit] = useState<"kmh" | "ms" | "mph">("kmh");
+  const [imperial, setImperial] = useState(true);
+  const toggleUnits = () => setImperial(u => !u);
   const dt = new Date(eNow);
   const dateStr = utc
     ? dt.toUTCString().replace(/\d{2}:\d{2}:\d{2} GMT/, "").trim()
@@ -161,22 +163,18 @@ export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow, speed })
 
   return (
     <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 5 }}>
-      <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
+      <button className="dist-panel" onClick={toggleUnits} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
         <div className="lbl">EARTH DISTANCE</div>
-        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>{fmtD(dE)}</div>
-        <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dE * 0.621371).replace("km", "mi")}</div>
-      </div>
-      <div className="dist-panel" style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px" }}>
+        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>{imperial ? fmtD(dE * 0.621371).replace("km", "mi") : fmtD(dE)}</div>
+      </button>
+      <button className="dist-panel" onClick={toggleUnits} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
         <div className="lbl">MOON DISTANCE</div>
-        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#b8c0cc", fontVariantNumeric: "tabular-nums" }}>{fmtD(dM)}</div>
-        <div className="dist-mi" style={{ fontSize: 10, color: "#7b8da4", marginTop: 1 }}>{fmtD(dM * 0.621371).replace("km", "mi")}</div>
-      </div>
-      <button className="dist-panel" onClick={() => setSpeedUnit(u => u === "kmh" ? "ms" : u === "ms" ? "mph" : "kmh")} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
+        <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#b8c0cc", fontVariantNumeric: "tabular-nums" }}>{imperial ? fmtD(dM * 0.621371).replace("km", "mi") : fmtD(dM)}</div>
+      </button>
+      <button className="dist-panel" onClick={toggleUnits} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
         <div className="lbl">SPEED</div>
         <div className="dist-val" style={{ fontSize: 18, fontWeight: 700, color: "#eab308", fontVariantNumeric: "tabular-nums" }}>
-          {speedUnit === "kmh" ? `${Math.round(speed * 3600).toLocaleString()} km/h`
-            : speedUnit === "ms" ? `${Math.round(speed * 1000).toLocaleString()} m/s`
-            : `${Math.round(speed * 2236.936).toLocaleString()} mph`}
+          {imperial ? `${Math.round(speed * 2236.936).toLocaleString()} mph` : `${Math.round(speed * 3600).toLocaleString()} km/h`}
         </div>
       </button>
       <button className="dist-panel" onClick={() => setUtc(u => !u)} style={{ background: "rgba(3,6,16,.8)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 14px", textAlign: "left", color: "inherit", cursor: "pointer" }}>
