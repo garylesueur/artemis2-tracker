@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import TrackerClient from "./tracker-client";
 
-const SITE_URL = "https://artemis2-ten.vercel.app";
+const SITE_URL = "https://artemis2.lesueur.uk";
 
 export const metadata: Metadata = {
   title: "Artemis II Tracker — Real-Time 3D Mission Visualization",

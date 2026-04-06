@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: "%s | Artemis II Tracker",
   },
   description: "Real-time 3D tracker for NASA's Artemis II mission",
-  metadataBase: new URL("https://artemis2-ten.vercel.app"),
+  metadataBase: new URL("https://artemis2.lesueur.uk"),
 };
 
 export default function RootLayout({
