@@ -66,7 +66,8 @@ export function initScene(
   const texLoader = new THREE.TextureLoader();
   const earthMat = new THREE.MeshPhongMaterial({ specular: 0x334455, shininess: 25 });
   texLoader.load("/earth-color.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; earthMat.map = tex; earthMat.needsUpdate = true; });
-  texLoader.load("/earth-bump.jpg", (tex) => { earthMat.bumpMap = tex; earthMat.bumpScale = 0.05; earthMat.needsUpdate = true; });
+  texLoader.load("/earth-bump.jpg", (tex) => { earthMat.normalMap = tex; earthMat.normalScale = new THREE.Vector2(4, 4); earthMat.needsUpdate = true; });
+  texLoader.load("/earth-lights.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; earthMat.emissiveMap = tex; earthMat.emissive = new THREE.Color(0xffddaa); earthMat.emissiveIntensity = 0.3; earthMat.needsUpdate = true; });
   const earthGeo = new THREE.SphereGeometry(EARTH_R, 64, 64);
   earthGeo.rotateX(Math.PI / 2);
   const earth = new THREE.Mesh(earthGeo, earthMat);

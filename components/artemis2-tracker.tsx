@@ -241,17 +241,17 @@ const ArtemisTracker3D: FC = () => {
       const secSinceJ2000 = (eNow - J2000) / 1000;
       const earthAngle = (280.46 + (secSinceJ2000 / SIDEREAL_DAY) * 360) * Math.PI / 180;
       if (o.earth) o.earth.rotation.z = earthAngle;
-      // Cloud layers spin with Earth but at slightly different speeds + UV drift
-      const driftHours = secSinceJ2000 / 3600;
+      // Cloud layers spin with Earth but drift visibly via UV offset
+      const t = performance.now() / 1000;
       if (o.clouds) {
-        o.clouds.rotation.z = earthAngle * 0.97;
+        o.clouds.rotation.z = earthAngle;
         const m = (o.clouds as THREE.Mesh).material as THREE.MeshPhongMaterial;
-        if (m.map) { m.map.offset.x = driftHours * 0.0008; m.map.offset.y = Math.sin(driftHours * 0.001) * 0.02; }
+        if (m.map) { m.map.offset.x = t * 0.0012; m.map.offset.y = Math.sin(t * 0.06) * 0.006; }
       }
       if (o.cloudsHi) {
-        o.cloudsHi.rotation.z = earthAngle * 0.91;
+        o.cloudsHi.rotation.z = earthAngle;
         const m = (o.cloudsHi as THREE.Mesh).material as THREE.MeshPhongMaterial;
-        if (m.map) { m.map.offset.x = 0.4 + driftHours * 0.002; m.map.offset.y = 0.1 + Math.sin(driftHours * 0.0015) * 0.03; }
+        if (m.map) { m.map.offset.x = 0.4 - t * 0.002; m.map.offset.y = 0.1 + Math.sin(t * 0.08 + 1) * 0.008; }
       }
 
       // User location pin on Earth
