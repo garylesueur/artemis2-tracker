@@ -19,7 +19,7 @@ export function initScene(
   // Root group — rotates the whole scene so the orbital plane lies flat in XZ
   // Orbital plane normal (from trajectory PCA): (-0.17, 0.52, -0.84)
   const sceneRoot = new THREE.Group();
-  const orbitalNormal = new THREE.Vector3(-0.1703, 0.5232, -0.8350).normalize();
+  const orbitalNormal = new THREE.Vector3(0.1703, -0.5232, 0.8350).normalize();
   sceneRoot.quaternion.setFromUnitVectors(orbitalNormal, new THREE.Vector3(0, 1, 0));
   scn.add(sceneRoot);
 
