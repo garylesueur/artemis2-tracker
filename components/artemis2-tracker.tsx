@@ -137,6 +137,9 @@ const ArtemisTracker3D: FC = () => {
       if (o.sunLight) o.sunLight.position.copy(sV.clone().normalize().multiplyScalar(1000));
 
       o.moon!.position.copy(mV);
+      // Tidal locking — near side always faces Earth (at origin)
+      o.moon!.lookAt(0, 0, 0);
+      o.moon!.rotateY(-Math.PI / 2);
 
       if (o.trajLine) o.trajLine.visible = showTrajectory;
       if (o.cLine) o.cLine.visible = showTrajectory;
