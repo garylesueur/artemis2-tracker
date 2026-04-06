@@ -144,8 +144,14 @@ const ArtemisTracker3D: FC = () => {
       o.orion.scale.setScalar(orionScale);
       o.oGlow!.scale.setScalar(orionScale * 1.2);
 
-      // Sun position and lighting direction
-      if (o.sun) o.sun.position.copy(sV);
+      // Sun position, lighting direction, and surface animation
+      if (o.sun) {
+        o.sun.position.copy(sV);
+        const sunMat = o.sun.material;
+        if (sunMat && 'uniforms' in sunMat) {
+          (sunMat as THREE.ShaderMaterial).uniforms.uTime.value = performance.now() / 1000;
+        }
+      }
       if (o.sunLight) o.sunLight.position.copy(sV.clone().normalize().multiplyScalar(1000));
 
       o.moon!.position.copy(mV);

@@ -29,14 +29,124 @@ export function initScene(
   sceneRoot.add(sunL);
   objRef.current.sunLight = sunL;
 
-  // Sun — positioned correctly each frame via render loop
+  // Sun — shader with granulation, limb darkening, and animated surface
   const sunR = 696000 * KM2U; // ~174 units
+  const sunMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0.0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      varying vec2 vUv;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = position;
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      varying vec2 vUv;
+
+      // Simplex-style noise for solar granulation
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+      vec2 mod289(vec2 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+      vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+      float snoise(vec2 v) {
+        const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                           -0.577350269189626, 0.024390243902439);
+        vec2 i = floor(v + dot(v, C.yy));
+        vec2 x0 = v - i + dot(i, C.xx);
+        vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+        vec4 x12 = x0.xyxy + C.xxzz;
+        x12.xy -= i1;
+        i = mod289(i);
+        vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+        vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+        m = m*m; m = m*m;
+        vec3 x = 2.0 * fract(p * C.www) - 1.0;
+        vec3 h = abs(x) - 0.5;
+        vec3 ox = floor(x + 0.5);
+        vec3 a0 = x - ox;
+        m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+        vec3 g;
+        g.x = a0.x * x0.x + h.x * x0.y;
+        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+        return 130.0 * dot(m, g);
+      }
+
+      void main() {
+        // View-dependent limb darkening
+        float rim = dot(vNormal, vec3(0.0, 0.0, 1.0));
+        float limb = pow(max(rim, 0.0), 0.4);
+
+        // Solar granulation — multi-octave noise on the sphere surface
+        vec2 sCoord = vUv * 20.0;
+        float t = uTime * 0.03;
+        float gran = 0.0;
+        gran += snoise(sCoord * 1.0 + t * 0.5) * 0.5;
+        gran += snoise(sCoord * 2.0 - t * 0.3) * 0.25;
+        gran += snoise(sCoord * 4.0 + t * 0.7) * 0.125;
+        gran = gran * 0.5 + 0.5; // normalize to 0-1
+
+        // Sunspots — dark regions that drift slowly
+        float spot1 = smoothstep(0.62, 0.58, snoise(sCoord * 0.5 + vec2(t * 0.1, t * 0.05)));
+        float spot2 = smoothstep(0.65, 0.60, snoise(sCoord * 0.4 + vec2(-t * 0.08, t * 0.12) + 5.0));
+        float spots = min(1.0, spot1 + spot2 * 0.7);
+
+        // Color gradient — center is white-yellow, edges are deep orange-red
+        vec3 coreColor = vec3(1.0, 0.98, 0.9);    // white-hot center
+        vec3 midColor = vec3(1.0, 0.85, 0.4);      // golden yellow
+        vec3 edgeColor = vec3(0.95, 0.4, 0.1);     // deep orange at limb
+        float edgeFactor = 1.0 - limb;
+        vec3 baseColor = mix(coreColor, midColor, edgeFactor * 0.6);
+        baseColor = mix(baseColor, edgeColor, pow(edgeFactor, 2.5));
+
+        // Apply granulation — bright granules with dark intergranular lanes
+        vec3 color = baseColor * (0.85 + gran * 0.3);
+
+        // Apply sunspots
+        color = mix(color, vec3(0.3, 0.15, 0.05), spots * 0.6);
+
+        // Limb darkening
+        color *= (0.5 + limb * 0.5);
+
+        // Bright plage regions near sunspots
+        float plage = snoise(sCoord * 1.5 + t * 0.2 + 3.0);
+        plage = smoothstep(0.3, 0.6, plage) * spots * 0.3;
+        color += vec3(1.0, 0.9, 0.5) * plage;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
   const sunMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(sunR, 32, 32),
-    new THREE.MeshBasicMaterial({ color: 0xffffee }),
+    new THREE.SphereGeometry(sunR, 48, 48),
+    sunMat,
   );
   sceneRoot.add(sunMesh);
   objRef.current.sun = sunMesh;
+
+  // Sun atmosphere — layered glow shells
+  const sunGlowColors = [0xffaa33, 0xff6611, 0xff3300];
+  const sunGlowScales = [1.03, 1.08, 1.15];
+  const sunGlowOpacities = [0.12, 0.06, 0.03];
+  sunGlowScales.forEach((s, i) => {
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(sunR * s, 32, 32),
+      new THREE.MeshBasicMaterial({
+        color: sunGlowColors[i],
+        transparent: true,
+        opacity: sunGlowOpacities[i],
+        side: THREE.BackSide,
+      }),
+    );
+    sunMesh.add(glow);
+  });
 
   // Stars — circular dot texture so they don't render as squares
   const starDot = (() => {
