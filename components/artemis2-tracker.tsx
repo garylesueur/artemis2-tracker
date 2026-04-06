@@ -290,9 +290,23 @@ const ArtemisTracker3D: FC = () => {
       const zc = ctl.current;
       zc.r += (zc.rTarget - zc.r) * 0.12;
 
-      // Camera tracking (skip when user has dragged)
+      // Camera tracking
       const c = ctl.current;
-      if (!c.drag && !c.manual) {
+
+      // When an object is selected, orbit around it and zoom to radius × 2
+      if (selectedObj) {
+        let selPos: THREE.Vector3 | null = null;
+        let selR = 0;
+        if (selectedObj === "earth" && o.earth) { selPos = o.earth.getWorldPosition(new THREE.Vector3()); selR = EARTH_R; }
+        else if (selectedObj === "moon" && o.moon) { selPos = o.moon.getWorldPosition(new THREE.Vector3()); selR = MOON_R; }
+        else if (selectedObj === "orion" && o.orion) { selPos = o.orion.getWorldPosition(new THREE.Vector3()); selR = 0.5; }
+        if (selPos) {
+          c.tgt.lerp(selPos, 0.08);
+          const goalR = Math.max(2, selR * 5);
+          c.rTarget += (goalR - c.rTarget) * 0.08;
+        }
+      } else if (!c.drag && !c.manual) {
+        // No selection — use camera mode tracking
         let goalTgt: THREE.Vector3, goalR: number;
         const earthW = o.earth ? o.earth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         const moonW = o.moon!.getWorldPosition(new THREE.Vector3());
@@ -329,15 +343,6 @@ const ArtemisTracker3D: FC = () => {
         }
         c.tgt.lerp(goalTgt, 0.06);
         c.rTarget += (goalR - c.rTarget) * 0.06;
-      }
-
-      // When an object is selected, orbit around it
-      if (selectedObj) {
-        let selPos: THREE.Vector3 | null = null;
-        if (selectedObj === "earth" && o.earth) selPos = o.earth.getWorldPosition(new THREE.Vector3());
-        else if (selectedObj === "moon" && o.moon) selPos = o.moon.getWorldPosition(new THREE.Vector3());
-        else if (selectedObj === "orion" && o.orion) selPos = o.orion.getWorldPosition(new THREE.Vector3());
-        if (selPos) c.tgt.lerp(selPos, 0.08);
       }
 
       // Always update camera position from controls
@@ -568,7 +573,14 @@ const ArtemisTracker3D: FC = () => {
 
   const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
 
-  const handleCamMode = (mode: CamMode): void => { ctl.current.manual = false; setCamMode(mode); };
+  const handleCamMode = (mode: CamMode): void => {
+    ctl.current.manual = false;
+    setCamMode(mode);
+    if (mode === "moon") { setSelectedPoi(null); setSelectedObj("moon"); }
+    else if (mode === "earth") { setSelectedPoi(null); setSelectedObj("earth"); }
+    else if (mode === "orion") { setSelectedPoi(null); setSelectedObj("orion"); }
+    else { setSelectedPoi(null); setSelectedObj(null); }
+  };
 
   return (
     <div style={{ background: "#030610", height: "100dvh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
