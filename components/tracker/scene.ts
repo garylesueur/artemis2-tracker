@@ -213,11 +213,137 @@ export function initScene(
   ([1.05, 1.1, 1.18] as const).forEach((s, i) => earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * s, 48, 48), new THREE.MeshBasicMaterial({ color: [0x4499ff, 0x3377dd, 0x2255aa][i], transparent: true, opacity: [0.07, 0.035, 0.015][i], side: THREE.BackSide }))));
   sceneRoot.add(earthGroup);
 
-  // Moon
+  // Moon — custom shader with parallax occlusion mapping and self-shadowing
+  const moonMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColorMap: { value: null as THREE.Texture | null },
+      uHeightMap: { value: null as THREE.Texture | null },
+      uLightDir: { value: new THREE.Vector3(1, 0, 0) },
+      uHeightScale: { value: 0.014 },
+      uAmbient: { value: 0.15 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying mat3 vTBN;
+
+      void main() {
+        vUv = uv;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        vNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+
+        // Tangent frame in world space from geometry normal
+        vec3 n = vNormal;
+        vec3 t = normalize(cross(n, vec3(0.0, 1.0, 0.0)));
+        if (length(cross(n, vec3(0.0, 1.0, 0.0))) < 0.01) {
+          t = normalize(cross(n, vec3(1.0, 0.0, 0.0)));
+        }
+        vec3 b = normalize(cross(n, t));
+        vTBN = mat3(t, b, n);
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uColorMap;
+      uniform sampler2D uHeightMap;
+      uniform vec3 uLightDir;    // world-space direction TO the sun
+      uniform float uHeightScale;
+      uniform float uAmbient;
+
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying mat3 vTBN;
+
+      // World to tangent space
+      vec3 toTangentSpace(vec3 dir) {
+        return dir * vTBN; // transpose(TBN) * dir
+      }
+
+      // Self-shadow — trace toward light in UV space
+      float selfShadow(vec2 uv, vec3 lightTS) {
+        if (lightTS.z <= 0.0) return 0.0;
+
+        const int steps = 10;
+        float stepDepth = 1.0 / float(steps);
+        vec2 deltaUV = lightTS.xy / lightTS.z * uHeightScale / float(steps);
+
+        float surfaceH = 1.0 - texture2D(uHeightMap, uv).r;
+        float currentDepth = surfaceH;
+
+        for (int i = 0; i < steps; i++) {
+          uv += deltaUV;
+          currentDepth -= stepDepth;
+          float h = 1.0 - texture2D(uHeightMap, uv).r;
+          if (h > currentDepth) {
+            float block = (h - currentDepth) * 10.0;
+            return 1.0 - clamp(block, 0.0, 1.0);
+          }
+        }
+        return 1.0;
+      }
+
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 viewTS = normalize(toTangentSpace(viewDir));
+        vec3 lightTS = normalize(toTangentSpace(uLightDir));
+
+        // Parallax occlusion — step through heightmap layers
+        const int numLayers = 12;
+        float layerD = 1.0 / float(numLayers);
+        float depth = 0.0;
+        vec2 delta = -viewTS.xy / viewTS.z * uHeightScale / float(numLayers);
+        vec2 curUV = vUv;
+        float curH = 1.0 - texture2D(uHeightMap, curUV).r;
+
+        for (int i = 0; i < numLayers; i++) {
+          if (depth >= curH) break;
+          curUV += delta;
+          curH = 1.0 - texture2D(uHeightMap, curUV).r;
+          depth += layerD;
+        }
+        // Refine with interpolation
+        vec2 prevUV = curUV - delta;
+        float prevH = 1.0 - texture2D(uHeightMap, prevUV).r;
+        float prevD = depth - layerD;
+        float w = (curH - depth) / ((curH - depth) - (prevH - prevD));
+        vec2 pUv = mix(curUV, prevUV, w);
+
+        // Colour
+        vec4 color = texture2D(uColorMap, pUv);
+
+        // Normal from heightmap (central differences)
+        float tx = 1.0 / 2048.0;
+        float hL = texture2D(uHeightMap, pUv + vec2(-tx, 0.0)).r;
+        float hR = texture2D(uHeightMap, pUv + vec2(tx, 0.0)).r;
+        float hD = texture2D(uHeightMap, pUv + vec2(0.0, -tx)).r;
+        float hU = texture2D(uHeightMap, pUv + vec2(0.0, tx)).r;
+        vec3 bumpN = normalize(vec3((hL - hR) * 5.0, (hD - hU) * 5.0, 1.0));
+
+        // Diffuse in tangent space
+        float NdotL = max(dot(bumpN, lightTS), 0.0);
+
+        // Self-shadow
+        float shadow = selfShadow(pUv, lightTS);
+
+        // Final lighting — bright on the lit side
+        float diffuse = NdotL * shadow;
+        float lit = uAmbient + diffuse * 1.4;
+        lit = min(lit, 1.3); // allow slight overexposure for bright areas
+
+        // Subtle blue tint in shadow (earthshine)
+        vec3 tint = mix(vec3(0.7, 0.75, 0.88), vec3(1.0), smoothstep(0.0, 0.3, diffuse));
+
+        gl_FragColor = vec4(color.rgb * lit * tint, 1.0);
+      }
+    `,
+  });
   const moonTexLoader = new THREE.TextureLoader();
-  const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5 });
-  moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
-  moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.06; moonMat.needsUpdate = true; });
+  moonTexLoader.load("/moon-color.jpg", (tex) => { tex.colorSpace = THREE.SRGBColorSpace; moonMat.uniforms.uColorMap.value = tex; moonMat.needsUpdate = true; });
+  moonTexLoader.load("/moon-bump.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; moonMat.uniforms.uHeightMap.value = tex; moonMat.needsUpdate = true; });
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
 
