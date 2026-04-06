@@ -21,6 +21,7 @@ export interface OrbitControls {
 export interface SceneObjects {
   earth?: THREE.Mesh;
   clouds?: THREE.Mesh;
+  cloudsHi?: THREE.Mesh;
   moon?: THREE.Mesh;
   orion?: THREE.Group;
   oGlow?: THREE.Mesh;
@@ -30,6 +31,8 @@ export interface SceneObjects {
   trajPts?: THREE.Vector3[];
   sun?: THREE.Mesh;
   sunLight?: THREE.DirectionalLight;
+  earthshine?: THREE.PointLight;
+  moonlight?: THREE.PointLight;
   sceneRoot?: THREE.Group;
   userPin?: THREE.Group;
 }

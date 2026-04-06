@@ -81,13 +81,22 @@ export function initScene(
   earth.add(pinGroup);
   objRef.current.userPin = pinGroup;
 
-  // Clouds — separate sphere with real cloud texture, rotates independently
-  const cloudMat = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.4, depthWrite: false });
-  texLoader.load("/earth-clouds.jpg", (tex) => { cloudMat.map = tex; cloudMat.needsUpdate = true; });
-  const cloudGeo = new THREE.SphereGeometry(EARTH_R * 1.008, 48, 48);
-  cloudGeo.rotateX(Math.PI / 2);
-  const clouds = new THREE.Mesh(cloudGeo, cloudMat);
-  earthGroup.add(clouds); objRef.current.clouds = clouds;
+  // Clouds — two layers at different altitudes for parallax
+  // Low clouds — thicker, drift slowly via UV offset
+  const cloudMatLo = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.35, depthWrite: false });
+  texLoader.load("/earth-clouds.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; cloudMatLo.map = tex; cloudMatLo.needsUpdate = true; });
+  const cloudGeoLo = new THREE.SphereGeometry(EARTH_R * 1.005, 48, 48);
+  cloudGeoLo.rotateX(Math.PI / 2);
+  const cloudsLo = new THREE.Mesh(cloudGeoLo, cloudMatLo);
+  earthGroup.add(cloudsLo); objRef.current.clouds = cloudsLo;
+
+  // High clouds — thinner, drifts faster and in a different direction
+  const cloudMatHi = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.18, depthWrite: false });
+  texLoader.load("/earth-clouds.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.offset.set(0.4, 0.1); cloudMatHi.map = tex; cloudMatHi.needsUpdate = true; });
+  const cloudGeoHi = new THREE.SphereGeometry(EARTH_R * 1.012, 48, 48);
+  cloudGeoHi.rotateX(Math.PI / 2);
+  const cloudsHi = new THREE.Mesh(cloudGeoHi, cloudMatHi);
+  earthGroup.add(cloudsHi); objRef.current.cloudsHi = cloudsHi;
 
   // Atmosphere
   ([1.05, 1.1, 1.18] as const).forEach((s, i) => earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * s, 48, 48), new THREE.MeshBasicMaterial({ color: [0x4499ff, 0x3377dd, 0x2255aa][i], transparent: true, opacity: [0.07, 0.035, 0.015][i], side: THREE.BackSide }))));
@@ -95,11 +104,21 @@ export function initScene(
 
   // Moon
   const moonTexLoader = new THREE.TextureLoader();
-  const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5, emissive: 0x111518, emissiveIntensity: 0.35 });
+  const moonMat = new THREE.MeshPhongMaterial({ specular: 0x222222, shininess: 5 });
   moonTexLoader.load("/moon-color.jpg", (tex) => { moonMat.map = tex; moonMat.needsUpdate = true; });
-  moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.015; moonMat.needsUpdate = true; });
+  moonTexLoader.load("/moon-bump.jpg", (tex) => { moonMat.bumpMap = tex; moonMat.bumpScale = 0.06; moonMat.needsUpdate = true; });
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
+
+  // Earthshine — faint blue light from Earth illuminating the Moon's dark side
+  const earthshine = new THREE.PointLight(0x4466aa, 0.15, 0, 2);
+  sceneRoot.add(earthshine);
+  objRef.current.earthshine = earthshine;
+
+  // Moonlight — faint silver light from the Moon illuminating Earth
+  const moonlight = new THREE.PointLight(0xaabbcc, 0.08, 0, 2);
+  sceneRoot.add(moonlight);
+  objRef.current.moonlight = moonlight;
 
   // Trajectory — smooth with CatmullRom spline, clamp sub-surface points
   const rawPts = OEM.map(d => {

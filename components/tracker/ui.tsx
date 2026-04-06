@@ -82,18 +82,46 @@ interface TransportProps {
   onSlide: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-export const Transport: FC<TransportProps> = ({ live, speed, eNow, onSpeedClick, onLive, onSlide }) => (
-  <div className="transport-bar" style={{ padding: "6px 20px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid rgba(255,255,255,.08)", flexShrink: 0 }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      {([{ l: "⏪", s: -80000 }, { l: "◁", s: -15000 }, { l: "⏸", s: 0 }, { l: "▷", s: 15000 }, { l: "⏩", s: 80000 }] as const).map(b => (
-        <button key={b.l} onClick={() => onSpeedClick(b.s)}
-          style={{ background: !live && speed === b.s ? "rgba(234,179,8,.15)" : "rgba(255,255,255,.05)", border: !live && speed === b.s ? "1px solid rgba(234,179,8,.3)" : "1px solid rgba(255,255,255,.1)", color: !live && speed === b.s ? "#eab308" : "#8a9bb2", borderRadius: 5, padding: "4px 10px", fontSize: 14 }}>{b.l}</button>
-      ))}
-      <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
+const FWD_SPEEDS = [1, 10, 60, 600, 3600];
+const REV_SPEEDS = [-1, -10, -60, -600, -3600];
+
+export const Transport: FC<TransportProps> = ({ live, speed, eNow, onSpeedClick, onLive, onSlide }) => {
+  const btnStyle = (active: boolean) => ({ background: active ? "rgba(234,179,8,.15)" : "rgba(255,255,255,.05)", border: active ? "1px solid rgba(234,179,8,.3)" : "1px solid rgba(255,255,255,.1)", color: active ? "#eab308" : "#8a9bb2", borderRadius: 5, padding: "4px 10px", fontSize: 14, minWidth: 38 });
+
+  const fmtSpeed = (s: number): string => {
+    const a = Math.abs(s);
+    if (a >= 3600) return `${a / 3600}h/s`;
+    if (a >= 60) return `${a / 60}m/s`;
+    return `${a}×`;
+  };
+
+  const cycleRev = () => {
+    const cur = REV_SPEEDS.indexOf(speed);
+    const next = cur < 0 ? 0 : (cur + 1) % REV_SPEEDS.length;
+    onSpeedClick(REV_SPEEDS[next]);
+  };
+  const cycleFwd = () => {
+    const cur = FWD_SPEEDS.indexOf(speed);
+    const next = cur < 0 ? 0 : (cur + 1) % FWD_SPEEDS.length;
+    onSpeedClick(FWD_SPEEDS[next]);
+  };
+
+  return (
+    <div className="transport-bar" style={{ padding: "6px 20px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid rgba(255,255,255,.08)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={cycleRev} style={btnStyle(!live && speed < 0)}>
+          {!live && speed < 0 ? `◁${fmtSpeed(speed)}` : "◁"}
+        </button>
+        <button onClick={() => onSpeedClick(0)} style={btnStyle(!live && speed === 0)}>⏸</button>
+        <button onClick={cycleFwd} style={btnStyle(!live && speed > 0)}>
+          {!live && speed > 0 ? `▷${fmtSpeed(speed)}` : "▷"}
+        </button>
+        <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
+      </div>
+      <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ width: "100%", height: 32 }} />
     </div>
-    <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ width: "100%", height: 32 }} />
-  </div>
-);
+  );
+};
 
 interface CameraControlsProps {
   camMode: CamMode;

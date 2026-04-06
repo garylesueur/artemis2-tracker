@@ -69,7 +69,7 @@ const ArtemisTracker3D: FC = () => {
 
   useEffect(() => {
     if (live) { const iv = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(iv); }
-    if (speed !== 0 && tOver !== null) { const iv = setInterval(() => setTOver(p => Math.max(LAUNCH_UTC - 3600000, Math.min(SPLASHDOWN_UTC + 3600000, (p ?? Date.now()) + speed * 50))), 16); return () => clearInterval(iv); }
+    if (speed !== 0 && tOver !== null) { const iv = setInterval(() => setTOver(p => Math.max(LAUNCH_UTC - 3600000, Math.min(SPLASHDOWN_UTC + 3600000, (p ?? Date.now()) + speed * 16))), 16); return () => clearInterval(iv); }
   }, [live, speed, tOver]);
 
   const onSlide = (e: React.ChangeEvent<HTMLInputElement>): void => { setTOver(LAUNCH_UTC + Number(e.target.value)); setLive(false); setSpeed(0); };
@@ -152,6 +152,18 @@ const ArtemisTracker3D: FC = () => {
       o.moon!.lookAt(0, 0, 0);
       o.moon!.rotateY(-Math.PI / 2);
 
+      // Earthshine — position light near Moon, offset toward Earth
+      if (o.earthshine) {
+        const toEarth = mV.clone().negate().normalize();
+        o.earthshine.position.copy(mV).add(toEarth.multiplyScalar(MOON_R * 3));
+      }
+      // Moonlight — position light near Earth, offset toward Moon
+      if (o.moonlight) {
+        const toMoon = mV.clone().normalize();
+        const EARTH_R_L = 6371 * KM2U;
+        o.moonlight.position.copy(toMoon.multiplyScalar(EARTH_R_L * 3));
+      }
+
       if (o.trajLine) o.trajLine.visible = showTrajectory;
       if (o.cLine) o.cLine.visible = showTrajectory;
       if (o.moonOrbit) o.moonOrbit.visible = showMoonOrbit;
@@ -229,7 +241,18 @@ const ArtemisTracker3D: FC = () => {
       const secSinceJ2000 = (eNow - J2000) / 1000;
       const earthAngle = (280.46 + (secSinceJ2000 / SIDEREAL_DAY) * 360) * Math.PI / 180;
       if (o.earth) o.earth.rotation.z = earthAngle;
-      if (o.clouds) o.clouds.rotation.z = earthAngle * 0.97;
+      // Cloud layers spin with Earth but at slightly different speeds + UV drift
+      const driftHours = secSinceJ2000 / 3600;
+      if (o.clouds) {
+        o.clouds.rotation.z = earthAngle * 0.97;
+        const m = (o.clouds as THREE.Mesh).material as THREE.MeshPhongMaterial;
+        if (m.map) { m.map.offset.x = driftHours * 0.0008; m.map.offset.y = Math.sin(driftHours * 0.001) * 0.02; }
+      }
+      if (o.cloudsHi) {
+        o.cloudsHi.rotation.z = earthAngle * 0.91;
+        const m = (o.cloudsHi as THREE.Mesh).material as THREE.MeshPhongMaterial;
+        if (m.map) { m.map.offset.x = 0.4 + driftHours * 0.002; m.map.offset.y = 0.1 + Math.sin(driftHours * 0.0015) * 0.03; }
+      }
 
       // User location pin on Earth
       if (o.userPin && userLoc && !o.userPin.visible) {
