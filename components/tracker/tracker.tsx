@@ -2,13 +2,21 @@
 
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import * as THREE from "three";
-import type { CamMode, OrbitControls, SceneObjects } from "./tracker/types";
-import { OEM, LAUNCH_UTC, SPLASHDOWN_UTC, MISSION_DUR, DATA_START, DATA_END, KM2U, MOON_R, EARTH_R, CREW, MOON_POIS } from "./tracker/data";
-import { getMoonPosKm, getSunPosKm, interpOEM, fmtT, getSpeedKmS } from "./tracker/ephemeris";
-import { initScene, setupControls } from "./tracker/scene";
-import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal, ObjectInfoPanel, PoiInfoPanel } from "./tracker/ui";
+import type { OrbitControls, SceneObjects } from "./types";
+import type { MissionConfig, OEMPoint, POI } from "@/lib/types";
+import { KM2U, MOON_R, EARTH_R } from "@/lib/constants";
+import { getMoonPosKm, getSunPosKm, interpOEM, fmtT, getSpeedKmS } from "./ephemeris";
+import { getVisiblePois } from "@/lib/world";
+import { getMission } from "@/lib/missions";
+import { initScene, setupControls } from "./scene";
+import { addMissionToScene } from "./scene-mission";
+import { GLOBAL_STYLES, Header, Transport, CameraControls, DistancePanels, BottomBar, CrewModal, ObjectInfoPanel, PoiInfoPanel } from "./ui";
 
-const ArtemisTracker3D: FC = () => {
+interface TrackerProps {
+  missionId: string;
+}
+
+const Tracker: FC<TrackerProps> = ({ missionId }) => {
   const cvRef = useRef<HTMLCanvasElement>(null);
   const camRef = useRef<THREE.PerspectiveCamera | null>(null);
   const scnRef = useRef<THREE.Scene | null>(null);
@@ -16,11 +24,16 @@ const ArtemisTracker3D: FC = () => {
   const objRef = useRef<SceneObjects>({});
   const ctl = useRef<OrbitControls>({ drag: false, right: false, manual: false, lx: 0, ly: 0, theta: Math.PI * 0.5, phi: Math.PI * 0.15, r: 180, rTarget: 180, tgt: new THREE.Vector3(48, 0, 0) });
 
+  // Mission data — loaded async
+  const [config, setConfig] = useState<MissionConfig | null>(null);
+  const [trajectory, setTrajectory] = useState<OEMPoint[] | null>(null);
+  const [allPois, setAllPois] = useState<POI[]>([]);
+
   const [now, setNow] = useState<number>(Date.now());
   const [tOver, setTOver] = useState<number | null>(null);
   const [speed, setSpeed] = useState<number>(0);
   const [live, setLive] = useState<boolean>(true);
-  const [camMode, setCamMode] = useState<CamMode>("flyby");
+  const [camMode, setCamMode] = useState<string>("flyby");
   const [showLabels, setShowLabels] = useState(true);
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [showMoonOrbit, setShowMoonOrbit] = useState(true);
@@ -35,23 +48,49 @@ const ArtemisTracker3D: FC = () => {
   const connectorDotRef = useRef<SVGCircleElement>(null);
   const raycaster = useRef(new THREE.Raycaster());
 
+  // Load mission config and trajectory
+  useEffect(() => {
+    const mission = getMission(missionId);
+    if (!mission) return;
+    setConfig(mission);
+    setCamMode(mission.cameraPresets[0]?.id ?? "full");
+    // Past mission — start at beginning, no live mode
+    if (Date.now() > mission.endUtc) {
+      setLive(false);
+      setTOver(mission.launchUtc);
+    }
+    mission.loadTrajectory().then(t => {
+      setTrajectory(t);
+      // Combine world POIs (filtered by mission date) + mission-specific POIs
+      const worldPois = getVisiblePois(mission.launchUtc);
+      setAllPois([...worldPois, ...mission.pois]);
+    });
+  }, [missionId]);
+
   // Request geolocation once on mount
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-        () => {}, // silently ignore denial
+        () => {},
       );
     }
   }, []);
 
-  const eNow = live ? now : (tOver ?? now);
-  const met = eNow - LAUNCH_UTC;
-  const mf = Math.max(0, Math.min(1, met / MISSION_DUR));
-  const clampedTime = Math.max(DATA_START, Math.min(DATA_END, eNow));
+  // Derived values — only compute when we have config + trajectory
+  const launchUtc = config?.launchUtc ?? 0;
+  const endUtc = config?.endUtc ?? 0;
+  const missionDur = endUtc - launchUtc;
+  const dataStart = trajectory ? trajectory[0]?.[0] ?? 0 : 0;
+  const dataEnd = trajectory ? trajectory[trajectory.length - 1]?.[0] ?? 0 : 0;
 
-  const orionKm = interpOEM(clampedTime);
-  const orionKmAhead = interpOEM(clampedTime + 1000);
+  const eNow = live ? now : (tOver ?? now);
+  const met = eNow - launchUtc;
+  const mf = missionDur > 0 ? Math.max(0, Math.min(1, met / missionDur)) : 0;
+  const clampedTime = Math.max(dataStart, Math.min(dataEnd, eNow));
+
+  const orionKm = trajectory ? interpOEM(trajectory, clampedTime) : { x: 0, y: 0, z: 0 };
+  const orionKmAhead = trajectory ? interpOEM(trajectory, clampedTime + 1000) : { x: 0, y: 0, z: 0 };
   const moonKm = getMoonPosKm(eNow);
   const oV = new THREE.Vector3(orionKm.x * KM2U, orionKm.y * KM2U, orionKm.z * KM2U);
   const velDir = new THREE.Vector3(
@@ -62,26 +101,40 @@ const ArtemisTracker3D: FC = () => {
   const mV = new THREE.Vector3(moonKm.x * KM2U, moonKm.y * KM2U, moonKm.z * KM2U);
   const sunKm = getSunPosKm(eNow);
   const sV = new THREE.Vector3(sunKm.x * KM2U, sunKm.y * KM2U, sunKm.z * KM2U);
-  const dE = Math.sqrt(orionKm.x ** 2 + orionKm.y ** 2 + orionKm.z ** 2);
+  const dE = Math.max(0, Math.sqrt(orionKm.x ** 2 + orionKm.y ** 2 + orionKm.z ** 2) - 6371);
   const dM = Math.sqrt((orionKm.x - moonKm.x) ** 2 + (orionKm.y - moonKm.y) ** 2 + (orionKm.z - moonKm.z) ** 2);
-  const spd = getSpeedKmS(clampedTime);
+  const spd = trajectory ? getSpeedKmS(trajectory, clampedTime) : 0;
 
+  // Phase calculation from config
   let phase = "Pre-launch";
-  if (met > MISSION_DUR) phase = "Splashdown";
-  else if (mf >= 0.97) phase = "Re-entry";
-  else if (mf >= 0.60) phase = "Return Coast";
-  else if (mf >= 0.50) phase = "Lunar Flyby";
-  else if (mf >= 0.10) phase = "Translunar Coast";
-  else if (mf > 0) phase = "Earth Orbit";
+  let phaseCol = "#3b82f6";
+  if (config) {
+    if (met > missionDur) {
+      const lastPhase = config.phases[config.phases.length - 1];
+      phase = lastPhase?.name ?? "Complete";
+      phaseCol = lastPhase?.color ?? "#22c55e";
+    } else {
+      for (let i = config.phases.length - 1; i >= 0; i--) {
+        if (mf >= config.phases[i].startFraction) {
+          phase = config.phases[i].name;
+          phaseCol = config.phases[i].color;
+          break;
+        }
+      }
+    }
+  }
   const day = Math.floor(Math.max(0, met) / 86400000) + 1;
 
   useEffect(() => {
     if (live) { const iv = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(iv); }
-    if (speed !== 0 && tOver !== null) { const iv = setInterval(() => setTOver(p => Math.max(LAUNCH_UTC - 3600000, Math.min(SPLASHDOWN_UTC + 3600000, (p ?? Date.now()) + speed * 16))), 16); return () => clearInterval(iv); }
-  }, [live, speed, tOver]);
+    if (speed !== 0 && tOver !== null) { const iv = setInterval(() => setTOver(p => Math.max(launchUtc - 3600000, Math.min(endUtc + 3600000, (p ?? Date.now()) + speed * 16))), 16); return () => clearInterval(iv); }
+  }, [live, speed, tOver, launchUtc, endUtc]);
 
-  const onSlide = (e: React.ChangeEvent<HTMLInputElement>): void => { setTOver(LAUNCH_UTC + Number(e.target.value)); setLive(false); setSpeed(0); };
-  const goLive = (): void => { setLive(true); setTOver(null); setSpeed(0); };
+  const isPast = config ? Date.now() > config.endUtc : false;
+  const launchConfirmed = config?.launchConfirmed !== false;
+
+  const onSlide = (e: React.ChangeEvent<HTMLInputElement>): void => { setTOver(launchUtc + Number(e.target.value)); setLive(false); setSpeed(0); };
+  const goLive = (): void => { if (isPast) { setLive(false); setTOver(launchUtc); setSpeed(0); } else { setLive(true); setTOver(null); setSpeed(0); } };
   const onSpeedClick = (s: number): void => { if (live) { setTOver(Date.now()); setLive(false); } setSpeed(s); };
 
   const updCam = useCallback((): void => {
@@ -100,14 +153,12 @@ const ArtemisTracker3D: FC = () => {
   const fullTrajPts = useRef<THREE.Vector3[]>([]);
   const lblRef = useRef<HTMLDivElement>(null);
 
-  // Project a world-space position to screen coords, with a world-space radius for bottom offset
   const projectToScreen = useCallback((worldPos: THREE.Vector3, worldRadius: number, cam: THREE.PerspectiveCamera, container: HTMLElement): { x: number; y: number; visible: boolean } => {
     const v = worldPos.clone().project(cam);
     const hw = container.clientWidth / 2;
     const hh = container.clientHeight / 2;
     const x = v.x * hw + hw;
     const y = -v.y * hh + hh;
-    // Project a point at the bottom of the object to get screen-space offset
     const bottomPos = worldPos.clone();
     bottomPos.y -= worldRadius;
     const vb = bottomPos.project(cam);
@@ -115,11 +166,13 @@ const ArtemisTracker3D: FC = () => {
     return { x, y: yBottom, visible: v.z < 1 };
   }, []);
 
-  // Scene init
-  useEffect(() => {
-    const cv = cvRef.current; if (!cv) return;
+  // Scene init — creates world scene, then adds mission objects once trajectory is loaded
+  const missionCleanupRef = useRef<(() => void) | null>(null);
 
-    const { renderer, scene, camera, cleanup: sceneCleanup } = initScene(cv, objRef, fullTrajPts);
+  useEffect(() => {
+    const cv = cvRef.current; if (!cv || !config) return;
+
+    const { renderer, scene, camera, cleanup: sceneCleanup } = initScene(cv, objRef, config.launchUtc);
     renRef.current = renderer;
     scnRef.current = scene;
     camRef.current = camera;
@@ -127,12 +180,11 @@ const ArtemisTracker3D: FC = () => {
 
     const controlsCleanup = setupControls(cv, ctl, camRef, updCam);
 
-    // Click-to-select — raycast against Earth, Moon, Sun, Orion
+    // Click-to-select
     let clickStart = { x: 0, y: 0 };
     const onDown = (e: PointerEvent) => { clickStart = { x: e.clientX, y: e.clientY }; };
     cv.addEventListener("pointerdown", onDown);
     const onCanvasClick = (e: PointerEvent) => {
-      // Ignore if we've been dragging
       if (Math.abs(e.clientX - clickStart.x) > 5 || Math.abs(e.clientY - clickStart.y) > 5) return;
       const cam = camRef.current;
       if (!cam || !scnRef.current) return;
@@ -144,11 +196,10 @@ const ArtemisTracker3D: FC = () => {
       raycaster.current.setFromCamera(mouse, cam);
       const o = objRef.current;
 
-      // When Moon is selected, check POI clicks first
-      if (o.moonPois && o.moonPois.visible && o.moonPois.children.length > 0) {
-        const poiHits = raycaster.current.intersectObjects(o.moonPois.children, true);
+      const poiGroups = [o.moonPois, o.earthPois].filter(g => g && g.visible && g.children.length > 0);
+      for (const group of poiGroups) {
+        const poiHits = raycaster.current.intersectObjects(group!.children, true);
         if (poiHits.length > 0) {
-          // Walk up to the pin group to get poiName (hit could be a child mesh)
           let hit = poiHits[0].object as THREE.Object3D;
           while (hit && !hit.userData.poiName && hit.parent) hit = hit.parent;
           const poiName = hit?.userData?.poiName as string;
@@ -163,7 +214,7 @@ const ArtemisTracker3D: FC = () => {
       if (o.earth) targets.push({ name: "earth", obj: o.earth });
       if (o.moon) targets.push({ name: "moon", obj: o.moon });
       if (o.sun) targets.push({ name: "sun", obj: o.sun });
-      if (o.orion) targets.push({ name: "orion", obj: o.orion });
+      if (o.orion) targets.push({ name: config.spacecraft.id, obj: o.orion });
       const meshes = targets.map(t => t.obj);
       const hits = raycaster.current.intersectObjects(meshes, true);
       if (hits.length > 0) {
@@ -180,9 +231,29 @@ const ArtemisTracker3D: FC = () => {
     };
     cv.addEventListener("pointerup", onCanvasClick);
 
-    return () => { cv.removeEventListener("pointerdown", onDown); cv.removeEventListener("pointerup", onCanvasClick); controlsCleanup(); sceneCleanup(); };
-  }, [updCam]);
+    return () => {
+      cv.removeEventListener("pointerdown", onDown);
+      cv.removeEventListener("pointerup", onCanvasClick);
+      controlsCleanup();
+      if (missionCleanupRef.current) missionCleanupRef.current();
+      sceneCleanup();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, updCam]);
 
+  // Add mission objects when trajectory loads
+  useEffect(() => {
+    if (!config || !trajectory || !objRef.current.sceneRoot) return;
+
+    // Clean up previous mission objects if any
+    if (missionCleanupRef.current) missionCleanupRef.current();
+
+    const moonPois = allPois.filter(p => p.body === "moon");
+    const earthPois = allPois.filter(p => p.body === "earth");
+
+    const { cleanup } = addMissionToScene(config, trajectory, objRef, fullTrajPts, moonPois, earthPois);
+    missionCleanupRef.current = cleanup;
+  }, [config, trajectory, allPois]);
 
   // Render loop
   useEffect(() => {
@@ -190,20 +261,21 @@ const ArtemisTracker3D: FC = () => {
     const tick = (): void => {
       raf = requestAnimationFrame(tick);
       const o = objRef.current;
-      if (!o.orion || !o.sceneRoot || !scnRef.current || !renRef.current || !camRef.current) return;
+      if (!o.sceneRoot || !scnRef.current || !renRef.current || !camRef.current) return;
 
-      // Positions are in OEM coords — sceneRoot rotates them to align the orbital plane
-      o.orion.position.copy(oV);
-      const up = new THREE.Vector3(0, 1, 0);
-      const orientQ = new THREE.Quaternion().setFromUnitVectors(up, velDir);
-      o.orion.quaternion.copy(orientQ);
-      o.oGlow!.position.copy(oV);
+      // Only update spacecraft if it exists (mission objects loaded)
+      if (o.orion) {
+        o.orion.position.copy(oV);
+        const up = new THREE.Vector3(0, 1, 0);
+        const orientQ = new THREE.Quaternion().setFromUnitVectors(up, velDir);
+        o.orion.quaternion.copy(orientQ);
+      }
+      if (o.oGlow) o.oGlow.position.copy(oV);
 
-      const oWorld = o.orion.getWorldPosition(new THREE.Vector3());
-      const camDist = camRef.current.position.distanceTo(oWorld);
-      const orionScale = Math.max(0.15, Math.min(2.5, camDist * 0.012));
-      o.orion.scale.setScalar(orionScale);
-      o.oGlow!.scale.setScalar(orionScale * 1.2);
+      if (o.orion) {
+        o.orion.scale.setScalar(0.01);
+        if (o.oGlow) o.oGlow.scale.setScalar(0.03);
+      }
 
       // Sun position, lighting direction, and surface animation
       if (o.sun) {
@@ -216,12 +288,9 @@ const ArtemisTracker3D: FC = () => {
       if (o.sunLight) o.sunLight.position.copy(sV.clone().normalize().multiplyScalar(1000));
 
       o.moon!.position.copy(mV);
-      // Tidal locking — near side always faces Earth (at origin)
       o.moon!.lookAt(0, 0, 0);
       o.moon!.rotateY(-Math.PI / 2);
 
-      // Update Moon shader light direction in world space
-      // sunDir is in sceneRoot local space — transform to world space to match the shader's TBN
       const moonShader = o.moon!.material;
       if (moonShader && 'uniforms' in moonShader) {
         const sunDir = sV.clone().sub(mV).normalize();
@@ -229,38 +298,27 @@ const ArtemisTracker3D: FC = () => {
         (moonShader as THREE.ShaderMaterial).uniforms.uLightDir.value.copy(sunDir);
       }
 
-      // Solar corona — position at Moon, face camera along cam→Moon axis
       if (o.corona) {
         o.corona.position.copy(mV);
-
-        // Orient the corona plane to face the camera
-        // lookAt works in world space, so pass the camera's world position
         const camWorld = camRef.current.position.clone();
         o.corona.lookAt(camWorld);
-
-        // Alignment math in sceneRoot local space (where mV/sV live)
         const camLocal = o.sceneRoot!.worldToLocal(camWorld.clone());
         const camToMoon = mV.clone().sub(camLocal).normalize();
         const camToSun = sV.clone().sub(camLocal).normalize();
         const dot = camToMoon.dot(camToSun);
-
-        // Eclipse threshold — ramp up as alignment gets tighter
         const tightAlign = Math.pow(Math.max(0, (dot - 0.98) / 0.02), 2.0);
         const wideGlow = Math.pow(Math.max(0, (dot - 0.90) / 0.10), 4.0) * 0.15;
         const alignment = Math.min(1, tightAlign + wideGlow);
-
         const mat = o.corona.material as THREE.ShaderMaterial;
         mat.uniforms.uAlignment.value = alignment;
         mat.uniforms.uTime.value = performance.now() / 1000;
         o.corona.visible = alignment > 0.001;
       }
 
-      // Earthshine — position light near Moon, offset toward Earth
       if (o.earthshine) {
         const toEarth = mV.clone().negate().normalize();
         o.earthshine.position.copy(mV).add(toEarth.multiplyScalar(MOON_R * 3));
       }
-      // Moonlight — position light near Earth, offset toward Moon
       if (o.moonlight) {
         const toMoon = mV.clone().normalize();
         const EARTH_R_L = 6371 * KM2U;
@@ -270,7 +328,8 @@ const ArtemisTracker3D: FC = () => {
       if (o.trajLine) o.trajLine.visible = showTrajectory;
       if (o.cLine) o.cLine.visible = showTrajectory;
       if (o.moonOrbit) o.moonOrbit.visible = showMoonOrbit;
-      // Moon POIs — reposition each frame to match Moon's position and orientation
+      if (o.earthPois) o.earthPois.visible = selectedObj === "earth";
+
       if (o.moonPois) {
         o.moonPois.visible = selectedObj === "moon";
         if (o.moonPois.visible) {
@@ -290,56 +349,62 @@ const ArtemisTracker3D: FC = () => {
       const zc = ctl.current;
       zc.r += (zc.rTarget - zc.r) * 0.12;
 
-      // Camera tracking
       const c = ctl.current;
+      const spacecraftId = config?.spacecraft.id;
 
-      // When an object is selected, orbit around it and zoom to radius × 2
       if (selectedObj) {
         let selPos: THREE.Vector3 | null = null;
         let selR = 0;
         if (selectedObj === "earth" && o.earth) { selPos = o.earth.getWorldPosition(new THREE.Vector3()); selR = EARTH_R; }
         else if (selectedObj === "moon" && o.moon) { selPos = o.moon.getWorldPosition(new THREE.Vector3()); selR = MOON_R; }
-        else if (selectedObj === "orion" && o.orion) { selPos = o.orion.getWorldPosition(new THREE.Vector3()); selR = 0.5; }
+        else if (selectedObj === spacecraftId && o.orion) { selPos = o.orion.getWorldPosition(new THREE.Vector3()); selR = 0.02; }
         if (selPos) {
-          c.tgt.lerp(selPos, 0.08);
-          const goalR = Math.max(2, selR * 5);
-          c.rTarget += (goalR - c.rTarget) * 0.08;
+          // Snap hard to avoid judder on fast-moving objects
+          c.tgt.copy(selPos);
+          const goalR = Math.max(0.1, selR * 5);
+          c.rTarget += (goalR - c.rTarget) * 0.15;
         }
       } else if (!c.drag && !c.manual) {
-        // No selection — use camera mode tracking
+        const oWorld = o.orion ? o.orion.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         let goalTgt: THREE.Vector3, goalR: number;
         const earthW = o.earth ? o.earth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         const moonW = o.moon!.getWorldPosition(new THREE.Vector3());
-        if (camMode === "orion") {
+
+        // Find the current camera preset's behavior
+        const preset = config?.cameraPresets.find(p => p.id === camMode);
+        const behavior = preset?.behavior;
+
+        if (behavior?.type === "follow-craft") {
           goalTgt = oWorld.clone();
-          goalR = 3;
-        } else if (camMode === "moon") {
+          goalR = behavior.defaultR;
+        } else if (behavior?.type === "follow-body" && behavior.body === "moon") {
           goalTgt = moonW.clone();
-          goalR = 6;
+          goalR = behavior.defaultR;
           const away = moonW.clone().sub(oWorld).normalize();
           const goalTheta = Math.atan2(away.z, away.x);
           const goalPhi = Math.acos(Math.max(-1, Math.min(1, away.y / 1)));
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
-        } else if (camMode === "earth") {
+        } else if (behavior?.type === "follow-body" && behavior.body === "earth") {
           goalTgt = earthW.clone();
-          goalR = 25;
+          goalR = behavior.defaultR;
           const away = earthW.clone().sub(moonW).normalize();
           const goalTheta = Math.atan2(away.z, away.x);
           const goalPhi = Math.acos(Math.max(-1, Math.min(1, away.y / 1)));
           c.theta += (goalTheta - c.theta) * 0.04;
           c.phi += (goalPhi - c.phi) * 0.04;
-        } else if (camMode === "flyby") {
+        } else if (behavior?.type === "flyby") {
           goalTgt = oWorld.clone().lerp(moonW, 0.5);
           const halfSpan = oWorld.distanceTo(moonW) * 0.5 + MOON_R;
           const cam = camRef.current!;
-          const vFov = cam.fov * Math.PI / 360; // half vertical FOV in radians
-          const hFov = Math.atan(Math.tan(vFov) * cam.aspect); // half horizontal FOV
-          const fov = Math.min(vFov, hFov) * 0.85; // use narrower axis with margin
+          const vFov = cam.fov * Math.PI / 360;
+          const hFov = Math.atan(Math.tan(vFov) * cam.aspect);
+          const fov = Math.min(vFov, hFov) * 0.85;
           goalR = Math.max(3, halfSpan / Math.tan(fov));
         } else {
+          // "full" or default
           goalTgt = new THREE.Vector3(moonW.x * 0.5, moonW.y * 0.5, moonW.z * 0.5);
-          goalR = 140;
+          goalR = behavior?.type === "full" ? (behavior.defaultR ?? 140) : 140;
         }
         c.tgt.lerp(goalTgt, 0.06);
         c.rTarget += (goalR - c.rTarget) * 0.06;
@@ -356,15 +421,23 @@ const ArtemisTracker3D: FC = () => {
         );
         cam.up.set(0, 1, 0);
         cam.lookAt(c.tgt);
+        // Dynamic near plane — prevent clipping when zoomed close to Orion
+        const nearPlane = Math.max(0.001, c.r * 0.01);
+        if (Math.abs(cam.near - nearPlane) > 0.0001) {
+          cam.near = nearPlane;
+          cam.updateProjectionMatrix();
+        }
       }
 
-      // Completed trail — spline has 4x more points than OEM
-      const ci = OEM.findIndex(d => d[0] > clampedTime);
-      const rawIdx = ci < 0 ? OEM.length : ci;
-      const splineIdx = Math.min(rawIdx * 4, fullTrajPts.current.length);
-      if (splineIdx >= 2 && fullTrajPts.current.length > 0) {
-        o.cLine!.geometry.dispose();
-        o.cLine!.geometry = new THREE.BufferGeometry().setFromPoints(fullTrajPts.current.slice(0, splineIdx));
+      // Completed trail
+      if (trajectory && o.cLine && fullTrajPts.current.length > 0) {
+        const ci = trajectory.findIndex(d => d[0] > clampedTime);
+        const rawIdx = ci < 0 ? trajectory.length : ci;
+        const splineIdx = Math.min(rawIdx * 4, fullTrajPts.current.length);
+        if (splineIdx >= 2) {
+          o.cLine.geometry.dispose();
+          o.cLine.geometry = new THREE.BufferGeometry().setFromPoints(fullTrajPts.current.slice(0, splineIdx));
+        }
       }
 
       // Earth rotation — sidereal
@@ -373,7 +446,6 @@ const ArtemisTracker3D: FC = () => {
       const secSinceJ2000 = (eNow - J2000) / 1000;
       const earthAngle = (280.46 + (secSinceJ2000 / SIDEREAL_DAY) * 360) * Math.PI / 180;
       if (o.earth) o.earth.rotation.z = earthAngle;
-      // Cloud layers spin with Earth but drift visibly via UV offset
       const t = performance.now() / 1000;
       if (o.clouds) {
         o.clouds.rotation.z = earthAngle;
@@ -408,15 +480,15 @@ const ArtemisTracker3D: FC = () => {
         const SUN_R_U = 696000 * KM2U;
         const earthWorld = o.earth ? o.earth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         const moonWorld = o.moon ? o.moon.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
-        const orionWorld = oWorld;
+        const orionWorld = o.orion ? o.orion.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
         const sunWorld = o.sun ? o.sun.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+        const scLabel = config?.spacecraft.name.split(" ")[0] ?? "CRAFT";
         const labels: [string, THREE.Vector3, number, string][] = [
           ["EARTH", earthWorld, EARTH_R_U, "#4499dd"],
           ["MOON", moonWorld, MOON_R_U, "#999999"],
-          ["ORION", orionWorld, orionScale * 1.5, "#ffcc22"],
+          [scLabel, orionWorld, 0.03, "#ffcc22"],
           ["SUN", sunWorld, SUN_R_U, "#ffdd44"],
         ];
-        // Ensure label elements exist
         while (container.children.length < labels.length) {
           const el = document.createElement("div");
           el.style.cssText = "position:absolute;font:bold 10px monospace;letter-spacing:1.5px;pointer-events:none;text-align:center;transform:translateX(-50%);white-space:nowrap;padding:2px 6px;";
@@ -448,18 +520,15 @@ const ArtemisTracker3D: FC = () => {
           if (selectedObj === "earth" && o.earth) { worldPos = o.earth.getWorldPosition(new THREE.Vector3()); worldRadius = EARTH_R; }
           else if (selectedObj === "moon" && o.moon) { worldPos = o.moon.getWorldPosition(new THREE.Vector3()); worldRadius = MOON_R; }
           else if (selectedObj === "sun" && o.sun) { worldPos = o.sun.getWorldPosition(new THREE.Vector3()); worldRadius = 696000 * KM2U; }
-          else if (selectedObj === "orion" && o.orion) { worldPos = oWorld.clone(); worldRadius = orionScale * 1.5; }
+          else if (selectedObj === spacecraftId && o.orion) { worldPos = o.orion.getWorldPosition(new THREE.Vector3()); worldRadius = 0.03; }
 
           if (worldPos) {
             const hw = canvasParent.clientWidth / 2;
             const hh = canvasParent.clientHeight / 2;
-            // Project center and offset points to get screen-space bounding box
             const vc = worldPos.clone().project(cam);
             const cx = vc.x * hw + hw;
             const cy = -vc.y * hh + hh;
 
-            // Project points at the edges of the object sphere
-            const right = worldPos.clone();
             const camRight = new THREE.Vector3(); cam.getWorldDirection(camRight);
             const upDir = new THREE.Vector3(0, 1, 0);
             const rightDir = new THREE.Vector3().crossVectors(camRight, upDir).normalize();
@@ -479,7 +548,6 @@ const ArtemisTracker3D: FC = () => {
             selBox.style.height = `${halfH * 2}px`;
             selBox.style.display = vc.z < 1 ? "" : "none";
 
-            // Position info panel near the object
             const panel = infoPanelRef.current;
             if (panel && vc.z < 1) {
               const pw = panel.offsetWidth;
@@ -488,7 +556,6 @@ const ArtemisTracker3D: FC = () => {
               const vh = canvasParent.clientHeight;
               const gap = 14;
 
-              // Try right of selection box, then left, then below
               let pl = cx + halfW + gap;
               let pt = cy - ph / 2;
               let anchorX = cx + halfW;
@@ -501,7 +568,6 @@ const ArtemisTracker3D: FC = () => {
               panel.style.left = `${pl}px`;
               panel.style.top = `${pt}px`;
 
-              // Connector line from selection box edge to panel edge
               const line = connectorRef.current;
               const dot = connectorDotRef.current;
               if (line && dot) {
@@ -531,17 +597,18 @@ const ArtemisTracker3D: FC = () => {
 
       // POI info panel positioning
       const poiPanel = poiPanelRef.current;
-      if (poiPanel && selectedPoi && o.moonPois?.visible) {
+      if (poiPanel && selectedPoi) {
         const cam = camRef.current;
         const canvasParent = cvRef.current?.parentElement;
         if (cam && canvasParent) {
-          const poiDot = o.moonPois.children.find(c => (c as THREE.Mesh).userData.poiName === selectedPoi);
+          let poiDot: THREE.Object3D | undefined;
+          if (o.moonPois?.visible) poiDot = o.moonPois.children.find(c => c.userData.poiName === selectedPoi);
+          if (!poiDot && o.earthPois?.visible) { poiDot = o.earthPois.children.find(c => c.userData.poiName === selectedPoi); }
           if (poiDot) {
             const hw = canvasParent.clientWidth / 2;
             const hh = canvasParent.clientHeight / 2;
-            const vc = poiDot.position.clone();
-            // Transform from sceneRoot local to world space for projection
-            if (o.sceneRoot) vc.applyMatrix4(o.sceneRoot.matrixWorld);
+            const vc = new THREE.Vector3();
+            poiDot.getWorldPosition(vc);
             const projected = vc.project(cam);
             const sx = projected.x * hw + hw;
             const sy = -projected.y * hh + hh;
@@ -569,43 +636,49 @@ const ArtemisTracker3D: FC = () => {
     tick();
     return () => cancelAnimationFrame(raf);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen, selectedObj, selectedPoi]);
+  }, [oV, mV, sV, clampedTime, mf, camMode, eNow, showLabels, showTrajectory, showMoonOrbit, projectToScreen, selectedObj, selectedPoi, trajectory, config]);
 
-  const phaseCol = phase === "Lunar Flyby" ? "#eab308" : phase === "Re-entry" ? "#ef4444" : "#3b82f6";
-
-  const handleCamMode = (mode: CamMode): void => {
+  const handleCamMode = (mode: string): void => {
     ctl.current.manual = false;
     setCamMode(mode);
-    if (mode === "moon") { setSelectedPoi(null); setSelectedObj("moon"); }
-    else if (mode === "earth") { setSelectedPoi(null); setSelectedObj("earth"); }
-    else if (mode === "orion") { setSelectedPoi(null); setSelectedObj("orion"); }
-    else { setSelectedPoi(null); setSelectedObj(null); }
+    // Camera presets drive following via camMode, not selectedObj
+    // Clear selection UI so the info panel doesn't block the view
+    setSelectedPoi(null);
+    setSelectedObj(null);
   };
+
+  if (!config) {
+    return (
+      <div style={{ background: "#030610", height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", color: "#7b8da4", fontFamily: "'IBM Plex Mono',monospace" }}>
+        Loading mission...
+      </div>
+    );
+  }
+
+  const spacecraftInfo = config ? { id: config.spacecraft.id, name: config.spacecraft.name, icon: config.spacecraft.icon, color: config.spacecraft.color, type: config.spacecraft.type, facts: config.spacecraft.facts } : undefined;
 
   return (
     <div style={{ background: "#030610", height: "100dvh", fontFamily: "'IBM Plex Mono','JetBrains Mono',monospace", color: "#d4dde8", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{GLOBAL_STYLES}</style>
 
-      <Header phase={phase} day={day} met={met} phaseCol={phaseCol} />
-      <Transport live={live} speed={speed} eNow={eNow} onSpeedClick={onSpeedClick} onLive={goLive} onSlide={onSlide} />
+      <Header missionName={config.name} phase={phase} day={day} met={met} phaseCol={phaseCol} launchConfirmed={launchConfirmed} />
+      <Transport live={live} speed={speed} eNow={eNow} launchUtc={launchUtc} missionDur={missionDur} isPast={isPast} onSpeedClick={onSpeedClick} onLive={goLive} onSlide={onSlide} />
 
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <canvas ref={cvRef} style={{ width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }} />
         <div ref={lblRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "hidden" }} />
-        {/* Selection box */}
         <div ref={selBoxRef} style={{ position: "absolute", display: "none", pointerEvents: "none", border: "1px solid rgba(234,179,8,0.5)", borderRadius: 4, animation: "sel-pulse 2s ease-in-out infinite" }} />
-        {/* Connector line */}
         <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 9 }}>
           <line ref={connectorRef} style={{ display: "none" }} stroke="#eab308" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />
           <circle ref={connectorDotRef} style={{ display: "none" }} r={3} fill="#eab308" fillOpacity={0.5} />
         </svg>
-        {/* Object info panel — positioned by render loop */}
-        {selectedObj && <ObjectInfoPanel ref={infoPanelRef} name={selectedObj} dE={dE} dM={dM} speed={spd} eNow={eNow} onClose={() => { setSelectedObj(null); setSelectedPoi(null); }} />}
-        {selectedPoi && (() => { const poi = MOON_POIS.find(p => p.name === selectedPoi); return poi ? <PoiInfoPanel ref={poiPanelRef} poi={poi} onClose={() => setSelectedPoi(null)} /> : null; })()}
+        {selectedObj && <ObjectInfoPanel ref={infoPanelRef} name={selectedObj} spacecraft={spacecraftInfo} dE={dE} dM={dM} speed={spd} eNow={eNow} onClose={() => { setSelectedObj(null); }} />}
+        {selectedPoi && (() => { const poi = allPois.find(p => p.name === selectedPoi); return poi ? <PoiInfoPanel ref={poiPanelRef} poi={poi} onClose={() => setSelectedPoi(null)} /> : null; })()}
         <div className="hint-text" style={{ position: "absolute", bottom: 8, left: 14, fontSize: 10, color: "#4a5568", pointerEvents: "none", letterSpacing: ".5px" }}>DRAG ORBIT · SCROLL ZOOM · RIGHT-DRAG PAN · CLICK SELECT</div>
 
         <CameraControls
           camMode={camMode}
+          presets={config.cameraPresets}
           showLabels={showLabels}
           showTrajectory={showTrajectory}
           showMoonOrbit={showMoonOrbit}
@@ -618,11 +691,11 @@ const ArtemisTracker3D: FC = () => {
         <DistancePanels dE={dE} dM={dM} eNow={eNow} speed={spd} />
       </div>
 
-      <BottomBar mf={mf} eNow={eNow} crew={CREW} onCrewClick={() => setShowCrew(true)} />
+      <BottomBar mf={mf} eNow={eNow} countdowns={config.countdowns} crew={config.crew} crewLabel={`CREW — ${config.spacecraft.name.split(" ")[0]} "${config.name}"`} onCrewClick={() => setShowCrew(true)} />
 
-      {showCrew && <CrewModal crew={CREW} onClose={() => setShowCrew(false)} />}
+      {showCrew && config.crew.length > 0 && <CrewModal crew={config.crew} onClose={() => setShowCrew(false)} />}
     </div>
   );
 };
 
-export default ArtemisTracker3D;
+export default Tracker;

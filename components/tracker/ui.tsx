@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, forwardRef, type FC } from "react";
-import type { CamMode, CrewMember } from "./types";
-import { LAUNCH_UTC, FLYBY_UTC, SPLASHDOWN_UTC, MISSION_DUR, type MoonPoi } from "./data";
+import type { MissionConfig, POI, CrewMember, CameraPreset, Countdown } from "@/lib/types";
 import { fmtT, fmtD } from "./ephemeris";
 
 export const GLOBAL_STYLES = `
@@ -52,24 +51,26 @@ export const GLOBAL_STYLES = `
 `;
 
 interface HeaderProps {
+  missionName: string;
   phase: string;
   day: number;
   met: number;
   phaseCol: string;
+  launchConfirmed: boolean;
 }
 
-export const Header: FC<HeaderProps> = ({ phase, day, met, phaseCol }) => (
+export const Header: FC<HeaderProps> = ({ missionName, phase, day, met, phaseCol, launchConfirmed }) => (
   <div className="hdr-bar" style={{ padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,.1)", flexShrink: 0, gap: 8 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap", minWidth: 0 }}>
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e", flexShrink: 0 }} />
-      <span className="hdr-title" style={{ fontFamily: "'Outfit',sans-serif", fontSize: 24, fontWeight: 800, color: "#e2e8f0" }}>ARTEMIS II</span>
+      <span className="hdr-title" style={{ fontFamily: "'Outfit',sans-serif", fontSize: 24, fontWeight: 800, color: "#e2e8f0" }}>{missionName}</span>
       <span className="hdr-phase" style={{ fontFamily: "'Outfit',sans-serif", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 12, letterSpacing: "1px", background: `${phaseCol}18`, color: phaseCol, border: `1px solid ${phaseCol}33` }}>{phase.toUpperCase()}</span>
       <span className="hdr-day" style={{ fontSize: 12, color: "#7b8da4", fontWeight: 500 }}>DAY {day}</span>
       <span className="hdr-nasa" style={{ fontSize: 9, color: "#5a8abf", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(59,130,246,0.2)" }}>NASA OEM DATA</span>
     </div>
     <div style={{ textAlign: "right", whiteSpace: "nowrap", flexShrink: 0 }}>
       <div className="lbl hdr-met-label">MISSION ELAPSED TIME</div>
-      <div className="hdr-met" style={{ fontSize: 20, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums", letterSpacing: "0.5px" }}>{met > 0 ? fmtT(met) : `T−${fmtT(-met)}`}</div>
+      <div className="hdr-met" style={{ fontSize: 20, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums", letterSpacing: "0.5px" }}>{met > 0 ? fmtT(met) : !launchConfirmed ? "T− TBC" : `T−${fmtT(-met)}`}</div>
       <span className="hdr-phase-mobile" style={{ fontFamily: "'Outfit',sans-serif", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10, letterSpacing: "1px", background: `${phaseCol}18`, color: phaseCol, border: `1px solid ${phaseCol}33`, marginTop: 2 }}>{phase.toUpperCase()}</span>
     </div>
   </div>
@@ -79,64 +80,77 @@ interface TransportProps {
   live: boolean;
   speed: number;
   eNow: number;
+  launchUtc: number;
+  missionDur: number;
+  isPast: boolean;
   onSpeedClick: (s: number) => void;
   onLive: () => void;
   onSlide: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-const FWD_SPEEDS = [1, 10, 60, 600, 3600];
-const REV_SPEEDS = [-1, -10, -60, -600, -3600];
+// Playback durations in seconds — "watch full mission in X"
+const PLAYBACK_DURATIONS = [120, 60, 30, 15];
 
-export const Transport: FC<TransportProps> = ({ live, speed, eNow, onSpeedClick, onLive, onSlide }) => {
+export const Transport: FC<TransportProps> = ({ live, speed, eNow, launchUtc, missionDur, isPast, onSpeedClick, onLive, onSlide }) => {
   const btnStyle = (active: boolean) => ({ background: active ? "rgba(234,179,8,.15)" : "rgba(255,255,255,.05)", border: active ? "1px solid rgba(234,179,8,.3)" : "1px solid rgba(255,255,255,.1)", color: active ? "#eab308" : "#8a9bb2", borderRadius: 5, padding: "4px 10px", fontSize: 14, minWidth: 38 });
+
+  // Speed 1 = realtime, then mission-relative playback durations
+  const fwdSpeeds = [1, ...PLAYBACK_DURATIONS.map(t => Math.round(missionDur / (t * 1000)))];
+  const revSpeeds = fwdSpeeds.map(s => -s);
 
   const fmtSpeed = (s: number): string => {
     const a = Math.abs(s);
-    if (a >= 3600) return `${a / 3600}h/s`;
-    if (a >= 60) return `${a / 60}m/s`;
-    return `${a}×`;
+    if (a === 1) return "1×";
+    const dur = Math.round(missionDur / (a * 1000));
+    if (dur >= 60) return `${Math.round(dur / 60)}m`;
+    return `${dur}s`;
   };
 
   const cycleRev = () => {
-    const cur = REV_SPEEDS.indexOf(speed);
-    const next = cur < 0 ? 0 : (cur + 1) % REV_SPEEDS.length;
-    onSpeedClick(REV_SPEEDS[next]);
+    const cur = revSpeeds.indexOf(speed);
+    const next = cur < 0 ? 0 : (cur + 1) % revSpeeds.length;
+    onSpeedClick(revSpeeds[next]);
   };
   const cycleFwd = () => {
-    const cur = FWD_SPEEDS.indexOf(speed);
-    const next = cur < 0 ? 0 : (cur + 1) % FWD_SPEEDS.length;
-    onSpeedClick(FWD_SPEEDS[next]);
+    const cur = fwdSpeeds.indexOf(speed);
+    const next = cur < 0 ? 0 : (cur + 1) % fwdSpeeds.length;
+    onSpeedClick(fwdSpeeds[next]);
   };
 
   return (
     <div className="transport-bar" style={{ padding: "6px 20px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid rgba(255,255,255,.08)", flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button onClick={cycleRev} style={btnStyle(!live && speed < 0)}>
-          {!live && speed < 0 ? `◁${fmtSpeed(speed)}` : "◁"}
+          {!live && speed < 0 ? <>◁ {fmtSpeed(speed)}</> : "◁"}
         </button>
         <button onClick={() => onSpeedClick(0)} style={btnStyle(!live && speed === 0)}>⏸</button>
         <button onClick={cycleFwd} style={btnStyle(!live && speed > 0)}>
-          {!live && speed > 0 ? `▷${fmtSpeed(speed)}` : "▷"}
+          {!live && speed > 0 ? <>▷ {fmtSpeed(speed)}</> : "▷"}
         </button>
-        <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
+        {isPast ? (
+          <button onClick={onLive} style={{ background: "rgba(96,165,250,.1)", border: "1px solid rgba(96,165,250,.25)", color: "#60a5fa", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: 500, letterSpacing: "1px" }}>⟲ START</button>
+        ) : (
+          <button onClick={onLive} style={{ background: live ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: live ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(255,255,255,.1)", color: live ? "#22c55e" : "#8a9bb2", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: live ? 700 : 400, letterSpacing: "1px" }}>● LIVE</button>
+        )}
       </div>
-      <input type="range" min={-3600000} max={MISSION_DUR + 3600000} value={eNow - LAUNCH_UTC} onChange={onSlide} style={{ width: "100%", height: 32 }} />
+      <input type="range" min={-3600000} max={missionDur + 3600000} value={eNow - launchUtc} onChange={onSlide} style={{ width: "100%", height: 32 }} />
     </div>
   );
 };
 
 interface CameraControlsProps {
-  camMode: CamMode;
+  camMode: string;
+  presets: CameraPreset[];
   showLabels: boolean;
   showTrajectory: boolean;
   showMoonOrbit: boolean;
-  onCamMode: (mode: CamMode) => void;
+  onCamMode: (mode: string) => void;
   onToggleLabels: () => void;
   onToggleTrajectory: () => void;
   onToggleMoonOrbit: () => void;
 }
 
-export const CameraControls: FC<CameraControlsProps> = ({ camMode, showLabels, showTrajectory, showMoonOrbit, onCamMode, onToggleLabels, onToggleTrajectory, onToggleMoonOrbit }) => {
+export const CameraControls: FC<CameraControlsProps> = ({ camMode, presets, showLabels, showTrajectory, showMoonOrbit, onCamMode, onToggleLabels, onToggleTrajectory, onToggleMoonOrbit }) => {
   const [expanded, setExpanded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -153,7 +167,7 @@ export const CameraControls: FC<CameraControlsProps> = ({ camMode, showLabels, s
 
   return (
     <div className="cam-panel" style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-      {([{ id: "full" as CamMode, label: "FULL MISSION", icon: "◎" }, { id: "orion" as CamMode, label: "FOLLOW ORION", icon: "△" }, { id: "flyby" as CamMode, label: "FLYBY VIEW", icon: "⟐" }, { id: "moon" as CamMode, label: "MOON", icon: "◑" }, { id: "earth" as CamMode, label: "EARTH", icon: "◉" }]).map(v => (
+      {presets.map(v => (
         <button key={v.id} className={`cam-btn${ex}`} onClick={() => tap(() => onCamMode(v.id))}
           style={{ display: "flex", alignItems: "center", gap: 8, background: camMode === v.id ? "rgba(234,179,8,.15)" : "rgba(3,6,16,.75)", backdropFilter: "blur(8px)", border: camMode === v.id ? "1px solid rgba(234,179,8,.35)" : "1px solid rgba(255,255,255,.12)", color: camMode === v.id ? "#eab308" : "#8a9bb2", borderRadius: 6, padding: "7px 12px", fontSize: 11, fontFamily: "inherit", letterSpacing: ".5px", textAlign: "left" as const, width: 155 }}>
           <span style={{ fontSize: 15, lineHeight: 1 }}>{v.icon}</span>
@@ -219,34 +233,53 @@ export const DistancePanels: FC<DistancePanelsProps> = ({ dE, dM, eNow, speed })
 interface BottomBarProps {
   mf: number;
   eNow: number;
+  countdowns: Countdown[];
   crew: CrewMember[];
+  crewLabel?: string;
   onCrewClick: () => void;
 }
 
-export const BottomBar: FC<BottomBarProps> = ({ mf, eNow, crew, onCrewClick }) => (
+export const BottomBar: FC<BottomBarProps> = ({ mf, eNow, countdowns, crew, crewLabel, onCrewClick }) => (
   <div className="bottom-bar" style={{ padding: "8px 20px", display: "flex", gap: 8, flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,.1)", flexShrink: 0 }}>
     <div className="sc bottom-progress" style={{ flex: 1, minWidth: 90 }}>
       <div className="lbl">PROGRESS</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: "#eab308" }}>{(mf * 100).toFixed(1)}%</div>
       <div style={{ height: 3, background: "rgba(255,255,255,.08)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}><div style={{ height: "100%", width: `${mf * 100}%`, background: "linear-gradient(90deg,#3b82f6,#eab308)", borderRadius: 2 }} /></div>
     </div>
-    <div className="sc bottom-flyby" style={{ flex: 1, minWidth: 110 }}>
-      <div className="lbl">LUNAR FLYBY</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: eNow < FLYBY_UTC ? "#eab308" : "#22c55e" }}>{eNow < FLYBY_UTC ? `T−${fmtT(FLYBY_UTC - eNow)}` : "COMPLETE"}</div>
-    </div>
-    <div className="sc bottom-splash" style={{ flex: 1, minWidth: 110 }}>
-      <div className="lbl">SPLASHDOWN</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: eNow < SPLASHDOWN_UTC ? "#60a5fa" : "#22c55e" }}>{eNow < SPLASHDOWN_UTC ? `T−${fmtT(SPLASHDOWN_UTC - eNow)}` : "COMPLETE"}</div>
-    </div>
-    <div className="sc crew-bar" style={{ flex: 1.5, minWidth: 200 }}>
-      <div className="lbl">CREW — ORION &ldquo;INTEGRITY&rdquo;</div>
-      <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <button key={c.n} onClick={onCrewClick} style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8", borderBottom: "1px solid rgba(255,255,255,.15)" }}>{c.n}</span></button>)}</div>
-    </div>
+    {countdowns.map((cd, i) => (
+      <div key={i} className={`sc bottom-flyby`} style={{ flex: 1, minWidth: 110 }}>
+        <div className="lbl">{cd.label}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: eNow < cd.targetMs ? cd.color : cd.completedColor }}>{eNow < cd.targetMs ? `T−${fmtT(cd.targetMs - eNow)}` : cd.completedText}</div>
+      </div>
+    ))}
+    {crew.length > 0 && (
+      <div className="sc crew-bar" style={{ flex: 1.5, minWidth: 200 }}>
+        <div className="lbl">{crewLabel || "CREW"}</div>
+        <div style={{ display: "flex", gap: 12, marginTop: 3 }}>{crew.map(c => <button key={c.n} onClick={onCrewClick} style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer" }}><span style={{ color: "#7b8da4" }}>{c.r}</span> <span style={{ color: "#d4dde8", borderBottom: "1px solid rgba(255,255,255,.15)" }}>{c.n}</span></button>)}</div>
+      </div>
+    )}
   </div>
 );
 
+// World object info — Earth, Moon, Sun facts (shared across all missions)
+const WORLD_OBJECT_INFO: Record<string, { title: string; icon: string; color: string; type: string; facts: string[] }> = {
+  earth: {
+    title: "EARTH", icon: "🌍", color: "#4499dd", type: "Terrestrial Planet",
+    facts: ["Diameter: 12,742 km", "Mass: 5.972 × 10²⁴ kg", "Rotation: 23h 56m 4s", "Axial tilt: 23.44°", "Surface temp: −89 to 57°C", "Atmosphere: N₂ 78%, O₂ 21%"],
+  },
+  moon: {
+    title: "MOON", icon: "🌑", color: "#999999", type: "Natural Satellite",
+    facts: ["Diameter: 3,474 km", "Mass: 7.342 × 10²² kg", "Orbital period: 27.3 days", "Distance from Earth: ~384,400 km", "Surface gravity: 1.62 m/s²", "Tidally locked to Earth"],
+  },
+  sun: {
+    title: "SUN", icon: "☀️", color: "#ffdd44", type: "G-type Main-Sequence Star",
+    facts: ["Diameter: 1,392,700 km", "Mass: 1.989 × 10³⁰ kg", "Surface temp: 5,778 K", "Core temp: ~15.7 million K", "Age: ~4.6 billion years", "Luminosity: 3.828 × 10²⁶ W"],
+  },
+};
+
 interface ObjectInfoPanelProps {
   name: string;
+  spacecraft?: { id: string; name: string; icon: string; color: string; type: string; facts: string[] };
   dE: number;
   dM: number;
   speed: number;
@@ -254,80 +287,24 @@ interface ObjectInfoPanelProps {
   onClose: () => void;
 }
 
-const OBJECT_INFO: Record<string, { title: string; icon: string; color: string; type: string; facts: string[] }> = {
-  earth: {
-    title: "EARTH",
-    icon: "🌍",
-    color: "#4499dd",
-    type: "Terrestrial Planet",
-    facts: [
-      "Diameter: 12,742 km",
-      "Mass: 5.972 × 10²⁴ kg",
-      "Rotation: 23h 56m 4s",
-      "Axial tilt: 23.44°",
-      "Surface temp: −89 to 57°C",
-      "Atmosphere: N₂ 78%, O₂ 21%",
-    ],
-  },
-  moon: {
-    title: "MOON",
-    icon: "🌑",
-    color: "#999999",
-    type: "Natural Satellite",
-    facts: [
-      "Diameter: 3,474 km",
-      "Mass: 7.342 × 10²² kg",
-      "Orbital period: 27.3 days",
-      "Distance from Earth: ~384,400 km",
-      "Surface gravity: 1.62 m/s²",
-      "Tidally locked to Earth",
-    ],
-  },
-  sun: {
-    title: "SUN",
-    icon: "☀️",
-    color: "#ffdd44",
-    type: "G-type Main-Sequence Star",
-    facts: [
-      "Diameter: 1,392,700 km",
-      "Mass: 1.989 × 10³⁰ kg",
-      "Surface temp: 5,778 K",
-      "Core temp: ~15.7 million K",
-      "Age: ~4.6 billion years",
-      "Luminosity: 3.828 × 10²⁶ W",
-    ],
-  },
-  orion: {
-    title: "ORION MPCV",
-    icon: "🚀",
-    color: "#ffcc22",
-    type: "Crew Vehicle — Artemis II",
-    facts: [
-      "Crew module: 5.02m diameter",
-      "Mass: ~26,500 kg (crewed)",
-      "Service module: ESA-built",
-      "Solar array span: 19m",
-      "Crew capacity: 4 astronauts",
-      "Heat shield: 5m AVCOAT",
-    ],
-  },
-};
-
-export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(({ name, dE, dM, speed, eNow, onClose }, ref) => {
-  const info = OBJECT_INFO[name];
+export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(({ name, spacecraft, dE, dM, speed, eNow, onClose }, ref) => {
+  // Look up world objects first, then fall back to mission spacecraft
+  let info = WORLD_OBJECT_INFO[name];
+  if (!info && spacecraft && name === spacecraft.id) {
+    info = { title: spacecraft.name, icon: spacecraft.icon, color: spacecraft.color, type: spacecraft.type, facts: spacecraft.facts };
+  }
   if (!info) return null;
 
-  // Dynamic stats based on object
   const dynStats: { label: string; value: string }[] = [];
-  if (name === "orion") {
+  if (spacecraft && name === spacecraft.id) {
     dynStats.push({ label: "FROM EARTH", value: `${Math.round(dE).toLocaleString()} km` });
     dynStats.push({ label: "FROM MOON", value: `${Math.round(dM).toLocaleString()} km` });
     dynStats.push({ label: "VELOCITY", value: `${(speed * 3600).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} km/h` });
   } else if (name === "moon") {
     dynStats.push({ label: "FROM EARTH", value: `${(384400).toLocaleString()} km` });
-    dynStats.push({ label: "ORION DIST", value: `${Math.round(dM).toLocaleString()} km` });
+    if (spacecraft) dynStats.push({ label: `${spacecraft.name.split(" ")[0]} DIST`, value: `${Math.round(dM).toLocaleString()} km` });
   } else if (name === "earth") {
-    dynStats.push({ label: "ORION DIST", value: `${Math.round(dE).toLocaleString()} km` });
+    if (spacecraft) dynStats.push({ label: `${spacecraft.name.split(" ")[0]} DIST`, value: `${Math.round(dE).toLocaleString()} km` });
   } else if (name === "sun") {
     dynStats.push({ label: "FROM EARTH", value: "149.6M km" });
     dynStats.push({ label: "LIGHT DELAY", value: "~8 min 20 sec" });
@@ -369,14 +346,13 @@ export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(
   );
 });
 
-// POI Info Panel — shown when a Moon POI dot is clicked
 interface PoiInfoPanelProps {
-  poi: MoonPoi;
+  poi: POI;
   onClose: () => void;
 }
 
 export const PoiInfoPanel = forwardRef<HTMLDivElement, PoiInfoPanelProps>(({ poi, onClose }, ref) => {
-  const color = poi.type === "Landing Site" ? "#00ffcc" : poi.type === "Artemis Target" ? "#eab308" : "#88aacc";
+  const color = poi.type === "Launch Site" ? "#ff8844" : poi.type === "Splashdown" ? "#ff8844" : poi.type === "Landing Site" ? "#00ffcc" : poi.type === "Artemis Target" ? "#eab308" : "#88aacc";
   return (
     <div ref={ref} style={{
       position: "absolute", left: -9999, top: -9999,

@@ -1,8 +1,7 @@
 import type * as THREE from "three";
 
-export type Vec3 = { x: number; y: number; z: number };
-export type OEMPoint = [number, number, number, number]; // [ms, x_km, y_km, z_km]
-export type CamMode = "full" | "orion" | "moon" | "earth" | "flyby";
+// Re-export shared types from lib
+export type { Vec3, OEMPoint, CrewMember } from "@/lib/types";
 
 export interface OrbitControls {
   drag: boolean;
@@ -37,20 +36,5 @@ export interface SceneObjects {
   userPin?: THREE.Group;
   corona?: THREE.Mesh;
   moonPois?: THREE.Group;
-}
-
-export interface CrewMember {
-  n: string;
-  r: string;
-  full: string;
-  title: string;
-  age: number;
-  img: string;
-  rank: string;
-  born: string;
-  flights: number;
-  days: number;
-  evas: number;
-  bio: string;
-  url: string;
+  earthPois?: THREE.Group;
 }

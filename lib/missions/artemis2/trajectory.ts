@@ -1,4 +1,4 @@
-import type { OEMPoint, CrewMember } from "./types";
+import type { OEMPoint } from "@/lib/types";
 
 // NASA OEM EPHEMERIS — Real Orion trajectory data
 // Source: NASA/JSC/FOD/FDO, Artemis II OEM, EME2000 Earth-centered
@@ -413,51 +413,4 @@ export const OEM: OEMPoint[] = [
   [1775865517000,4810,4480,1620],
   [1775865917000,3294,4902,2391],
   [1775865960000,3294,4902,2391],
-];
-
-export const LAUNCH_UTC = new Date("2026-04-01T22:35:00Z").getTime();
-export const FLYBY_UTC = new Date("2026-04-06T14:30:00Z").getTime();
-export const SPLASHDOWN_UTC = new Date("2026-04-11T00:06:00Z").getTime();
-export const MISSION_DUR = SPLASHDOWN_UTC - LAUNCH_UTC;
-export const DATA_START = OEM[0][0];
-export const DATA_END = OEM[OEM.length - 1][0];
-
-export const KM2U = 1 / 4000;
-export const EARTH_R = 6371 * KM2U;
-export const MOON_R = 1737 * KM2U;
-
-export interface MoonPoi {
-  name: string;
-  lat: number;
-  lon: number;
-  type: string;
-  detail: string;
-}
-
-export const MOON_POIS: MoonPoi[] = [
-  // Apollo landing sites
-  { name: "Apollo 11", lat: 0.67, lon: 23.47, type: "Landing Site", detail: "Jul 20 1969 · Sea of Tranquility · Armstrong & Aldrin · First crewed lunar landing, 21 h 36 m on surface" },
-  { name: "Apollo 12", lat: -3.01, lon: -23.42, type: "Landing Site", detail: "Nov 19 1969 · Ocean of Storms · Conrad & Bean · Precision landing 163 m from Surveyor 3" },
-  { name: "Apollo 14", lat: -3.64, lon: -17.47, type: "Landing Site", detail: "Feb 5 1971 · Fra Mauro · Shepard & Mitchell · Shepard hit two golf balls on the Moon" },
-  { name: "Apollo 15", lat: 26.13, lon: 3.63, type: "Landing Site", detail: "Jul 30 1971 · Hadley–Apennine · Scott & Irwin · First use of the Lunar Roving Vehicle" },
-  { name: "Apollo 16", lat: -8.97, lon: 15.50, type: "Landing Site", detail: "Apr 21 1972 · Descartes Highlands · Young & Duke · Only mission to the lunar highlands" },
-  { name: "Apollo 17", lat: 20.19, lon: 30.77, type: "Landing Site", detail: "Dec 11 1972 · Taurus–Littrow · Cernan & Schmitt · Last crewed lunar mission, longest stay: 74 h 59 m" },
-  // Major craters
-  { name: "Tycho", lat: -43.31, lon: -11.36, type: "Impact Crater", detail: "Diameter 85 km · Age ~108 million years · Prominent ray system visible from Earth · Central peak rises 1.6 km" },
-  { name: "Copernicus", lat: 9.62, lon: -20.08, type: "Impact Crater", detail: "Diameter 93 km · Age ~800 million years · Terraced walls 3.8 km deep · Named after Nicolaus Copernicus" },
-  { name: "Aristarchus", lat: 23.73, lon: -47.49, type: "Impact Crater", detail: "Diameter 40 km · Brightest large crater on the Moon · Frequent transient lunar phenomena reported here" },
-  // Artemis target
-  { name: "South Pole", lat: -89.5, lon: 0, type: "Artemis Target", detail: "Permanently shadowed craters may contain water ice · Target for Artemis III crewed landing · Shackleton crater rim" },
-];
-
-export const EARTH_POIS: MoonPoi[] = [
-  { name: "KSC LC-39B", lat: 28.63, lon: -80.62, type: "Launch Site", detail: "Apr 1 2026 · Kennedy Space Center, Florida · Launch Complex 39B · SLS Block 1 lifted Orion + crew to orbit" },
-  { name: "Splashdown Zone", lat: 32.7, lon: -117.2, type: "Splashdown", detail: "Apr 11 2026 · Pacific Ocean ~60 mi off San Diego, California · USS John P. Murtha recovery · 11-parachute descent at ~17 mph" },
-];
-
-export const CREW: CrewMember[] = [
-  { n: "Wiseman", r: "CDR", full: "Reid Wiseman", title: "Commander", age: 50, img: "/crew/wiseman.jpg", rank: "Captain, U.S. Navy (Ret.)", born: "Baltimore, Maryland", flights: 2, days: 165, evas: 2, bio: "Navy test pilot and engineer. Flew on ISS Expedition 41 in 2014 logging 165 days and two spacewalks. Former NASA Chief Astronaut. Oldest person to travel beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/g-reid-wiseman/" },
-  { n: "Glover", r: "PLT", full: "Victor Glover", title: "Pilot", age: 49, img: "/crew/glover.jpg", rank: "Captain, U.S. Navy", born: "Pomona, California", flights: 2, days: 168, evas: 4, bio: "Fighter pilot with 3,000+ flight hours across 40+ aircraft and 24 combat missions. Piloted SpaceX Crew-1 to the ISS in 2020. First person of color to travel beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/victor-j-glover/" },
-  { n: "Koch", r: "MS1", full: "Christina Koch", title: "Mission Specialist 1", age: 47, img: "/crew/koch.jpg", rank: "NASA Astronaut", born: "Grand Rapids, Michigan", flights: 2, days: 328, evas: 6, bio: "Electrical engineer and physicist. Set the record for longest single spaceflight by a woman at 328 days on ISS Expeditions 59\u201361. Participated in the first all-female spacewalks. First woman beyond low Earth orbit.", url: "https://www.nasa.gov/humans-in-space/astronauts/christina-hammock-koch/" },
-  { n: "Hansen", r: "MS2", full: "Jeremy Hansen", title: "Mission Specialist 2", age: 50, img: "/crew/hansen.jpg", rank: "Colonel, Canadian Forces", born: "London, Ontario", flights: 1, days: 0, evas: 0, bio: "CF-18 fighter pilot and combat operations officer with NORAD. First Canadian to lead a NASA astronaut class. First non-U.S. citizen to fly beyond low Earth orbit. Selected by the Canadian Space Agency in 2009.", url: "https://www.nasa.gov/humans-in-space/astronauts/jeremy-hansen/" },
 ];

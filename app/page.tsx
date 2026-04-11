@@ -1,19 +1,18 @@
 import type { Metadata } from "next";
-import TrackerClient from "./tracker-client";
+import { getAllMissions } from "@/lib/missions";
+import WorldClient from "./world-client";
 
 const SITE_URL = "https://artemis2.lesueur.uk";
 
 export const metadata: Metadata = {
-  title: "Artemis II Tracker — Real-Time 3D Mission Visualization",
+  title: "Space Tracker — Real-Time 3D Mission Visualization",
   description:
-    "Track NASA's Artemis II crewed lunar flyby mission in real time with an interactive 3D visualization built from official NASA OEM ephemeris data.",
+    "Track NASA space missions in real time with interactive 3D visualizations built from official NASA OEM ephemeris data.",
   metadataBase: new URL(SITE_URL),
   keywords: [
-    "Artemis II",
+    "Artemis",
     "NASA",
     "moon",
-    "lunar flyby",
-    "Orion",
     "space tracker",
     "3D visualization",
     "mission tracker",
@@ -23,36 +22,29 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    title: "Artemis II Tracker",
+    title: "Space Tracker",
     description:
-      "Interactive 3D tracker for NASA's Artemis II crewed lunar flyby mission, using real NASA ephemeris data.",
-    siteName: "Artemis II Tracker",
+      "Interactive 3D tracker for NASA space missions, using real NASA ephemeris data.",
+    siteName: "Space Tracker",
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Artemis II mission trajectory — Earth to Moon and back",
+        alt: "Space mission tracker — Earth to Moon and back",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Artemis II Tracker",
+    title: "Space Tracker",
     description:
-      "Interactive 3D tracker for NASA's Artemis II crewed lunar flyby mission.",
+      "Interactive 3D tracker for NASA space missions.",
     images: ["/opengraph-image"],
   },
   robots: {
     index: true,
     follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
   },
   alternates: {
     canonical: SITE_URL,
@@ -60,5 +52,6 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <TrackerClient />;
+  const missions = getAllMissions();
+  return <WorldClient missions={missions} />;
 }

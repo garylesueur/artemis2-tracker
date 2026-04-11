@@ -1,5 +1,4 @@
-import type { Vec3 } from "./types";
-import { OEM } from "./data";
+import type { Vec3, OEMPoint } from "./types";
 
 // Simplified lunar ephemeris — low-precision Moon position (Earth-centered, ~0.5° accuracy)
 // Based on Meeus Ch.47 simplified. Good enough for visualisation.
@@ -67,21 +66,22 @@ export function getSunPosKm(dateMs: number): Vec3 {
 }
 
 // OEM interpolation — binary search + linear interp
-export function interpOEM(timeMs: number): Vec3 {
-  if (timeMs <= OEM[0][0]) return { x: OEM[0][1], y: OEM[0][2], z: OEM[0][3] };
-  if (timeMs >= OEM[OEM.length-1][0]) { const L = OEM[OEM.length-1]; return { x: L[1], y: L[2], z: L[3] }; }
-  let lo = 0, hi = OEM.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (OEM[m][0] <= timeMs) lo = m; else hi = m; }
-  const a = OEM[lo], b = OEM[hi];
+export function interpOEM(trajectory: OEMPoint[], timeMs: number): Vec3 {
+  if (trajectory.length === 0) return { x: 0, y: 0, z: 0 };
+  if (timeMs <= trajectory[0][0]) return { x: trajectory[0][1], y: trajectory[0][2], z: trajectory[0][3] };
+  if (timeMs >= trajectory[trajectory.length-1][0]) { const L = trajectory[trajectory.length-1]; return { x: L[1], y: L[2], z: L[3] }; }
+  let lo = 0, hi = trajectory.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (trajectory[m][0] <= timeMs) lo = m; else hi = m; }
+  const a = trajectory[lo], b = trajectory[hi];
   const t = (timeMs - a[0]) / (b[0] - a[0]);
   return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, z: a[3] + (b[3] - a[3]) * t };
 }
 
 // Speed from finite-difference of OEM positions (km/s)
-export function getSpeedKmS(timeMs: number): number {
+export function getSpeedKmS(trajectory: OEMPoint[], timeMs: number): number {
   const dt = 1000; // 1-second step
-  const a = interpOEM(timeMs - dt);
-  const b = interpOEM(timeMs + dt);
+  const a = interpOEM(trajectory, timeMs - dt);
+  const b = interpOEM(trajectory, timeMs + dt);
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   return Math.sqrt(dx * dx + dy * dy + dz * dz) / (2 * dt / 1000);
 }

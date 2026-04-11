@@ -1,13 +1,14 @@
 import * as THREE from "three";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { SceneObjects } from "./types";
-import { OEM, EARTH_R, MOON_R, KM2U, LAUNCH_UTC, MOON_POIS } from "./data";
+import { EARTH_R, MOON_R, KM2U } from "@/lib/constants";
 import { getMoonPosKm } from "./ephemeris";
 
+// Initialize the world scene — Earth, Moon, Sun, stars, atmosphere, lighting
+// This is shared across all missions and the world view
 export function initScene(
   canvas: HTMLCanvasElement,
   objRef: React.MutableRefObject<SceneObjects>,
-  fullTrajPts: React.MutableRefObject<THREE.Vector3[]>,
+  referenceDate: number, // used to build the orbital plane rotation (was LAUNCH_UTC)
 ): { renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; cleanup: () => void } {
   const ren = new THREE.WebGLRenderer({ canvas, antialias: true });
   ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -17,12 +18,11 @@ export function initScene(
   const cam = new THREE.PerspectiveCamera(50, 2, 0.1, 50000);
 
   // Root group — rotates the whole scene so the Moon's orbital plane lies flat in XZ
-  // Build rotation from two axes: Y = orbital normal, Z = Moon direction at launch
   const sceneRoot = new THREE.Group();
   const orbPeriod = 27.3 * 86400000;
-  const mp0 = getMoonPosKm(LAUNCH_UTC);
-  const mp1 = getMoonPosKm(LAUNCH_UTC + orbPeriod * 0.33);
-  const mp2 = getMoonPosKm(LAUNCH_UTC + orbPeriod * 0.67);
+  const mp0 = getMoonPosKm(referenceDate);
+  const mp1 = getMoonPosKm(referenceDate + orbPeriod * 0.33);
+  const mp2 = getMoonPosKm(referenceDate + orbPeriod * 0.67);
   const yAxis = new THREE.Vector3()
     .crossVectors(
       new THREE.Vector3(mp1.x - mp0.x, mp1.y - mp0.y, mp1.z - mp0.z),
@@ -184,7 +184,6 @@ export function initScene(
   makeStars(800, 1, 1800); makeStars(300, 1.5, 1800); makeStars(50, 2.5, 1800);
 
   // Earth — geometry rotated so north (+Y in Three.js) aligns with +Z (celestial north in EME2000)
-  // No group tilt needed — EME2000 is already Earth-equatorial
   const earthGroup = new THREE.Group();
   earthGroup.position.set(0, 0, 0);
 
@@ -208,7 +207,6 @@ export function initScene(
   objRef.current.userPin = pinGroup;
 
   // Clouds — two layers at different altitudes for parallax
-  // Low clouds — thicker, drift slowly via UV offset
   const cloudMatLo = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.35, depthWrite: false });
   texLoader.load("/earth-clouds.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; cloudMatLo.map = tex; cloudMatLo.needsUpdate = true; });
   const cloudGeoLo = new THREE.SphereGeometry(EARTH_R * 1.005, 48, 48);
@@ -216,7 +214,6 @@ export function initScene(
   const cloudsLo = new THREE.Mesh(cloudGeoLo, cloudMatLo);
   earthGroup.add(cloudsLo); objRef.current.clouds = cloudsLo;
 
-  // High clouds — thinner, drifts faster and in a different direction
   const cloudMatHi = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.18, depthWrite: false });
   texLoader.load("/earth-clouds.jpg", (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.offset.set(0.4, 0.1); cloudMatHi.map = tex; cloudMatHi.needsUpdate = true; });
   const cloudGeoHi = new THREE.SphereGeometry(EARTH_R * 1.012, 48, 48);
@@ -362,52 +359,13 @@ export function initScene(
   const moon = new THREE.Mesh(new THREE.SphereGeometry(MOON_R, 64, 64), moonMat);
   sceneRoot.add(moon); objRef.current.moon = moon;
 
-  // Moon POIs — small translucent pins at notable locations
-  const poiGroup = new THREE.Group();
-  const poiMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.7 });
-  const pinHeight = MOON_R * 0.06;
-  const pinRadius = MOON_R * 0.004;
-  const tipRadius = MOON_R * 0.01;
-  const pinGeo = new THREE.CylinderGeometry(pinRadius, pinRadius, pinHeight, 6);
-  pinGeo.translate(0, pinHeight / 2, 0); // base at origin, extends upward
-  const tipGeo = new THREE.SphereGeometry(tipRadius, 8, 8);
-  tipGeo.translate(0, pinHeight, 0); // tip at top of pin
-  const hitGeo = new THREE.CylinderGeometry(MOON_R * 0.025, MOON_R * 0.025, pinHeight * 1.2, 6);
-  hitGeo.translate(0, pinHeight * 0.5, 0);
-  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
-  for (const poi of MOON_POIS) {
-    const pin = new THREE.Group();
-    pin.add(new THREE.Mesh(pinGeo, poiMat));
-    pin.add(new THREE.Mesh(tipGeo, poiMat));
-    pin.add(new THREE.Mesh(hitGeo, hitMat)); // invisible click target
-    const latR = poi.lat * Math.PI / 180;
-    const lonR = poi.lon * Math.PI / 180;
-    const r = MOON_R * 1.002;
-    // Store local-space offset and surface normal for render-loop positioning
-    const surfaceDir = new THREE.Vector3(
-      Math.cos(latR) * Math.cos(lonR),
-      Math.sin(latR),
-      -Math.cos(latR) * Math.sin(lonR),
-    ).normalize();
-    // Orient pin to point radially outward — rotate from default Y-up to surface normal
-    const up = new THREE.Vector3(0, 1, 0);
-    pin.quaternion.setFromUnitVectors(up, surfaceDir);
-    pin.userData.poiName = poi.name;
-    pin.userData.localOffset = surfaceDir.clone().multiplyScalar(r);
-    pin.userData.localQuat = pin.quaternion.clone();
-    poiGroup.add(pin);
-  }
-  sceneRoot.add(poiGroup);
-  poiGroup.visible = false;
-  objRef.current.moonPois = poiGroup;
-
   // Solar corona — visible when Moon occults the Sun from camera's perspective
   const coronaMat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
     uniforms: {
-      uAlignment: { value: 0.0 }, // 0 = no eclipse, 1 = perfect alignment
+      uAlignment: { value: 0.0 },
       uTime: { value: 0.0 },
     },
     vertexShader: /* glsl */ `
@@ -422,7 +380,6 @@ export function initScene(
       uniform float uTime;
       varying vec2 vUv;
 
-      // Simple noise for corona streamers
       float hash(vec2 p) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
       }
@@ -442,18 +399,13 @@ export function initScene(
         float r = length(c);
         float angle = atan(c.y, c.x);
 
-        // Moon disc radius in UV space (~0.22 of the corona quad)
         float moonR = 0.22;
-
-        // Discard inside the Moon silhouette (the Moon mesh itself renders on top)
         if (r < moonR * 0.9) discard;
 
-        // Corona radial falloff — bright inner ring, fading outward
-        float inner = smoothstep(moonR * 0.85, moonR * 1.05, r); // fade in at Moon edge
-        float outer = 1.0 - smoothstep(moonR, 1.0, r);           // fade out toward edge
+        float inner = smoothstep(moonR * 0.85, moonR * 1.05, r);
+        float outer = 1.0 - smoothstep(moonR, 1.0, r);
         float corona = inner * outer;
 
-        // Asymmetric streamers — different lengths at different angles
         float streamer = 0.0;
         for (float i = 1.0; i <= 4.0; i++) {
           float a = angle * i + uTime * 0.02 * i;
@@ -462,77 +414,47 @@ export function initScene(
         }
         streamer = streamer * 0.6 + 0.4;
 
-        // Inner corona is white-hot, outer is reddish/gold
         float t = smoothstep(moonR, 0.7, r);
-        vec3 innerCol = vec3(1.0, 0.98, 0.95);      // white
-        vec3 midCol = vec3(1.0, 0.85, 0.5);          // gold
-        vec3 outerCol = vec3(0.9, 0.4, 0.2);         // red
+        vec3 innerCol = vec3(1.0, 0.98, 0.95);
+        vec3 midCol = vec3(1.0, 0.85, 0.5);
+        vec3 outerCol = vec3(0.9, 0.4, 0.2);
         vec3 col = mix(innerCol, mix(midCol, outerCol, t), t);
 
-        // Prominence spikes — a few bright radial jets
         float spikes = 0.0;
         spikes += pow(max(0.0, cos(angle * 3.0 + 0.5)), 12.0) * 0.4;
         spikes += pow(max(0.0, cos(angle * 5.0 - 1.2)), 16.0) * 0.3;
         spikes += pow(max(0.0, cos(angle * 7.0 + 2.8)), 20.0) * 0.2;
 
         float brightness = corona * streamer * (1.0 + spikes);
-
-        // Diamond ring effect right at the Moon's edge
         float diamondRing = exp(-pow((r - moonR) * 15.0, 2.0)) * 2.0;
         brightness += diamondRing;
 
-        // Modulate by alignment — fully visible only during eclipse geometry
         float alpha = brightness * uAlignment * 1.2;
         alpha = clamp(alpha, 0.0, 1.0);
-
-        // Boost color brightness for the diamond ring
         col = mix(col, vec3(1.0), diamondRing * 0.5);
-
         gl_FragColor = vec4(col, alpha);
       }
     `,
   });
-  // Quad sized ~4.5x Moon radius so streamers extend well beyond
   const coronaGeo = new THREE.PlaneGeometry(MOON_R * 9, MOON_R * 9);
   const corona = new THREE.Mesh(coronaGeo, coronaMat);
-  corona.renderOrder = -1; // render before Moon so Moon silhouette occludes it
+  corona.renderOrder = -1;
   sceneRoot.add(corona);
   objRef.current.corona = corona;
 
-  // Earthshine — faint blue light from Earth illuminating the Moon's dark side
+  // Earthshine
   const earthshine = new THREE.PointLight(0x4466aa, 0.15, 0, 2);
   sceneRoot.add(earthshine);
   objRef.current.earthshine = earthshine;
 
-  // Moonlight — faint silver light from the Moon illuminating Earth
+  // Moonlight
   const moonlight = new THREE.PointLight(0xaabbcc, 0.08, 0, 2);
   sceneRoot.add(moonlight);
   objRef.current.moonlight = moonlight;
 
-  // Trajectory — smooth with CatmullRom spline, clamp sub-surface points
-  const rawPts = OEM.map(d => {
-    const v = new THREE.Vector3(d[1] * KM2U, d[2] * KM2U, d[3] * KM2U);
-    const r = v.length();
-    if (r > 0 && r < EARTH_R) v.multiplyScalar(EARTH_R / r);
-    return v;
-  });
-  const spline = new THREE.CatmullRomCurve3(rawPts);
-  const tPts = spline.getPoints(rawPts.length * 4).map(v => {
-    const r = v.length();
-    if (r > 0 && r < EARTH_R) v.multiplyScalar(EARTH_R / r);
-    return v;
-  });
-  fullTrajPts.current = tPts;
-  const trajLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts), new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.3 }));
-  sceneRoot.add(trajLine); objRef.current.trajLine = trajLine;
-
-  const cLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(tPts.slice(0, 2)), new THREE.LineBasicMaterial({ color: 0x66bbff, transparent: true, opacity: 0.8 }));
-  sceneRoot.add(cLine); objRef.current.cLine = cLine;
-  objRef.current.trajPts = tPts;
-
   // Moon orbit line
   const moonOrbitPts: THREE.Vector3[] = [];
-  const orbitStart = LAUNCH_UTC;
+  const orbitStart = referenceDate;
   const orbitPeriod = 27.3 * 86400000;
   for (let i = 0; i <= 128; i++) {
     const t = orbitStart + (i / 128) * orbitPeriod;
@@ -543,69 +465,7 @@ export function initScene(
   moonOrbit.computeLineDistances();
   sceneRoot.add(moonOrbit); objRef.current.moonOrbit = moonOrbit;
 
-  // Orion spacecraft
-  const orionGroup = new THREE.Group();
-
-  // Load NASA STL model for the command module
-  const stlLoader = new STLLoader();
-  stlLoader.load("/orion-capsule.stl", (geometry) => {
-    geometry.computeVertexNormals();
-    geometry.center();
-    const scale = 0.09;
-    geometry.scale(scale, scale, scale);
-
-    const capsuleMat = new THREE.MeshPhongMaterial({
-      color: 0xf0f0f0, specular: 0xaaaaaa, shininess: 50,
-      flatShading: false,
-    });
-    const capsule = new THREE.Mesh(geometry, capsuleMat);
-    orionGroup.add(capsule);
-  });
-
-  // European Service Module (procedural — not in STL)
-  const smMat = new THREE.MeshPhongMaterial({ color: 0xf0f0f0, specular: 0xaaaaaa, shininess: 30 });
-  const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.7, 24), smMat);
-  sm.position.y = -0.75; orionGroup.add(sm);
-
-  // SM adapter ring
-  const adapter = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.12, 24), new THREE.MeshPhongMaterial({ color: 0xe0e0e0 }));
-  adapter.position.y = -0.35; orionGroup.add(adapter);
-
-  // Engine nozzle
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.14, 0.18, 12), new THREE.MeshPhongMaterial({ color: 0x444444, specular: 0x888888, shininess: 50 }));
-  nozzle.position.y = -1.2; orionGroup.add(nozzle);
-
-  // Solar panels — 4 wings radiating outward from service module in X pattern
-  const panelMat = new THREE.MeshPhongMaterial({ color: 0x2a4a9a, emissive: 0x1a2a60, emissiveIntensity: 0.4, specular: 0x88aaff, shininess: 80 });
-  const panelDarkMat = new THREE.MeshPhongMaterial({ color: 0x1a3577, emissive: 0x0f1a40, emissiveIntensity: 0.3 });
-  for (let i = 0; i < 4; i++) {
-    const wing = new THREE.Group();
-    // Panel extends outward (positive X in local space)
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.01, 0.28), panelMat);
-    panel.position.x = 0.8; // offset so inner edge is at origin
-    wing.add(panel);
-    for (let g = 0; g <= 8; g++) { const gl = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.012, 0.28), panelDarkMat); gl.position.x = g * 0.18; wing.add(gl); }
-    // Strut connecting SM body to panel
-    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.15, 6), new THREE.MeshPhongMaterial({ color: 0x888888 }));
-    strut.rotation.z = Math.PI / 2; strut.position.x = 0.07; wing.add(strut);
-    // Position at SM surface — two pairs, top pair and bottom pair close together
-    const angles = [
-      Math.PI * 0.15,   // top-right
-      Math.PI * 0.85,   // top-left
-      Math.PI * 1.15,   // bottom-left
-      Math.PI * 1.85,   // bottom-right
-    ];
-    const angle = angles[i];
-    wing.position.set(Math.cos(angle) * 0.32, -0.75, Math.sin(angle) * 0.32);
-    wing.rotation.y = -angle;
-    orionGroup.add(wing);
-  }
-  sceneRoot.add(orionGroup);
-
-  const oGlow = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.05 }));
-  sceneRoot.add(oGlow);
-
-  objRef.current.orion = orionGroup; objRef.current.oGlow = oGlow; objRef.current.sceneRoot = sceneRoot;
+  objRef.current.sceneRoot = sceneRoot;
 
   // Resize
   const resize = (): void => { const p = canvas.parentElement; if (!p) return; ren.setSize(p.clientWidth, p.clientHeight); cam.aspect = p.clientWidth / p.clientHeight; cam.updateProjectionMatrix(); };
@@ -633,7 +493,6 @@ export function setupControls(
     const dx = e.clientX - c.lx, dy = e.clientY - c.ly;
     c.lx = e.clientX; c.ly = e.clientY;
     if (c.right) {
-      // Right-drag: pan target on the screen plane
       const cam = camRef.current; if (!cam) return;
       const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
       const rt = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd).normalize();
@@ -641,7 +500,6 @@ export function setupControls(
       const sp = c.r * 0.002;
       c.tgt.add(rt.multiplyScalar(dx * sp)).add(up.multiplyScalar(dy * sp));
     } else {
-      // Left-drag: horizontal = rotate around Y, vertical = tilt up/down
       c.theta -= dx * 0.005;
       c.phi -= dy * 0.005;
     }
@@ -652,7 +510,7 @@ export function setupControls(
     e.preventDefault();
     const c = ctl.current;
     const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 60);
-    c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + delta * 0.0006)));
+    c.rTarget = Math.max(0.05, Math.min(400, c.rTarget * (1 + delta * 0.0006)));
   };
 
   canvas.addEventListener("mousedown", onD);
@@ -661,7 +519,7 @@ export function setupControls(
   canvas.addEventListener("wheel", onW, { passive: false });
   canvas.addEventListener("contextmenu", (e: Event) => e.preventDefault());
 
-  // Touch controls — 1-finger orbit, 2-finger pinch zoom
+  // Touch controls
   canvas.addEventListener("touchstart", (e: TouchEvent) => {
     e.preventDefault();
     if (e.touches.length === 1) {
@@ -680,7 +538,7 @@ export function setupControls(
     }
     if (e.touches.length === 2) {
       const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-      if (c._lp) { c.rTarget = Math.max(0.3, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); }
+      if (c._lp) { c.rTarget = Math.max(0.05, Math.min(400, c.rTarget * (1 + (c._lp - d) * 0.003))); }
       c._lp = d;
     }
   }, { passive: false });

@@ -15,10 +15,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Artemis II Tracker",
-    template: "%s | Artemis II Tracker",
+    default: "Space Tracker",
+    template: "%s | Space Tracker",
   },
-  description: "Real-time 3D tracker for NASA's Artemis II mission",
+  description: "Real-time 3D visualization of NASA space missions",
   metadataBase: new URL("https://artemis2.lesueur.uk"),
 };
 
