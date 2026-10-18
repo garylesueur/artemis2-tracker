@@ -1,0 +1,86 @@
+# PureGaz VPS migration; decisions agreed, staging approval pending.
+# Guide: /Users/gaz/dev/puregaz-vps/README.md
+# Names only. This application currently has no configured secrets.
+version: 1
+
+project:
+  slug: artemis2
+  name: Space Tracker
+  repo: garylesueur/artemis2-tracker
+  stage: planning
+  vault: null # No application secrets or env vars currently required.
+  log: docs/self-hosting/log.md
+
+replaces:
+  vercel: [artemis2]
+  convex_cloud: null
+  neon: null
+  inngest: false
+
+domains:
+  dns: mixed
+  zones: [gaz.dev] # lesueur.uk hostname retired; historical snapshot retained.
+  providers:
+    gaz.dev: vercel
+    lesueur.uk: cloudflare
+  rollback_records:
+    - docs/self-hosting/dns/2026-10-17-gaz.dev.json
+    - docs/self-hosting/dns/2026-10-17-lesueur.uk.json
+
+environments:
+  prod:
+    apps:
+      - name: web
+        kind: nextjs
+        dockerfile: Dockerfile # Locally verified on linux/arm64.
+        domains: [artemis2.gaz.dev]
+        redirects: {}
+        build_env: [DEPLOY_ENV] # production or staging; baked into indexing rules.
+        runtime_env: []
+        health: /
+        memory: 256m # Proposed runtime budget; verify with the image.
+        previews: false
+  staging:
+    apps:
+      - name: web
+        kind: nextjs
+        dockerfile: Dockerfile
+        domains: [artemis2-web-staging.puregaz.com]
+        build_env: [DEPLOY_ENV] # production or staging; baked into indexing rules.
+        runtime_env: []
+        health: /
+        memory: 256m
+        previews: false # Agreed; one staging site initially.
+
+jobs: []
+external_callbacks: []
+exceptions: [] # Analytics removed in the migration worktree.
+
+backups:
+  convex_export: not-applicable
+  postgres: not-applicable
+  restore_drill: null # Stateless app; rebuild from Git/image.
+
+cutover:
+  rollback_until: null
+  smoke_tests:
+    - Home page loads and lists both missions without browser errors.
+    - Both Artemis 1 and Artemis 2 mission pages render after direct navigation and reload.
+    - Mission selection, playback controls, timeline and camera controls work.
+    - Crew images, textures, scripts and styles load successfully.
+    - Unknown mission returns HTTP 404.
+    - robots.txt, sitemap.xml, canonical URLs and Open Graph image use the agreed production host.
+    - HTTPS is valid on artemis2.gaz.dev and HTTP redirects to HTTPS.
+
+planning:
+  inventory_date: 2026-10-17
+  decisions: agreed-2026-10-18
+  rollback_days: 0 # User decision: no fixed waiting period after verification.
+  vercel_removal: after-production-verification
+  analytics: remove # Agreed; no replacement service.
+  local_image_verified: true
+  local_image_architecture: linux/arm64
+  vps_image_verified: false # Native amd64 staging build still required.
+  production_deployment: dpl_DajkdetGibEigs35Tsa4hwf1dDtu
+  production_url: https://artemis2-5f71gxp0w-lesueur.vercel.app
+  retired_domains: [artemis2.lesueur.uk]

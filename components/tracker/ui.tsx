@@ -346,6 +346,8 @@ export const ObjectInfoPanel = forwardRef<HTMLDivElement, ObjectInfoPanelProps>(
   );
 });
 
+ObjectInfoPanel.displayName = "ObjectInfoPanel";
+
 interface PoiInfoPanelProps {
   poi: POI;
   onClose: () => void;
@@ -369,6 +371,8 @@ export const PoiInfoPanel = forwardRef<HTMLDivElement, PoiInfoPanelProps>(({ poi
     </div>
   );
 });
+
+PoiInfoPanel.displayName = "PoiInfoPanel";
 
 interface CrewModalProps {
   crew: CrewMember[];

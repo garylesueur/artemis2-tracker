@@ -1,8 +1,7 @@
+import { SITE_URL, IS_STAGING } from "@/lib/site";
 import type { Metadata } from "next";
 import { getAllMissions } from "@/lib/missions";
 import WorldClient from "./world-client";
-
-const SITE_URL = "https://artemis2.lesueur.uk";
 
 export const metadata: Metadata = {
   title: "Space Tracker — Real-Time 3D Mission Visualization",
@@ -43,8 +42,8 @@ export const metadata: Metadata = {
     images: ["/opengraph-image"],
   },
   robots: {
-    index: true,
-    follow: true,
+    index: !IS_STAGING,
+    follow: !IS_STAGING,
   },
   alternates: {
     canonical: SITE_URL,

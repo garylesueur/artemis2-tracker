@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL, IS_STAGING } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
-      allow: "/",
+      ...(IS_STAGING ? { disallow: "/" } : { allow: "/" }),
     },
-    sitemap: "https://artemis2-ten.vercel.app/sitemap.xml",
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

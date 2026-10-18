@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.env*
+*.log
+*.tsbuildinfo
+docs
+.claude
+.engineering
+.vercel
+.npmrc

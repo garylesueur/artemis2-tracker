@@ -1,0 +1,158 @@
+{
+  "records": [
+    {
+      "id": "1d24928ad45ac45f5a01a5e1184d6863",
+      "name": "flexirecord.com.lesueur.uk",
+      "type": "A",
+      "content": "192.0.2.1",
+      "ttl": 1,
+      "proxied": true,
+      "settings": {},
+      "comment": "Created during Cloudflare Rules deployment process for Redirect to a different domain [Template]",
+      "tags": []
+    },
+    {
+      "id": "1b0a0469be99b314128fa738d2d533b3",
+      "name": "flexirecord.lesueur.uk",
+      "type": "A",
+      "content": "192.0.2.1",
+      "ttl": 1,
+      "proxied": true,
+      "settings": {},
+      "comment": "Created during Cloudflare Rules deployment process for Redirect to a different domain [Template]",
+      "tags": []
+    },
+    {
+      "id": "c844c561c9bff49abfe07ecc1c4f2c1c",
+      "name": "jarvis.lesueur.uk",
+      "type": "A",
+      "content": "91.135.11.91",
+      "ttl": 1,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "9e58967c1058b9ee66facb8d61d7331f",
+      "name": "artemis2.lesueur.uk",
+      "type": "CNAME",
+      "content": "cd88319fe40e9522.vercel-dns-017.com",
+      "ttl": 600,
+      "proxied": false,
+      "settings": {
+        "flatten_cname": false
+      },
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "e9211ca11880614e734da46506954494",
+      "name": "lesueur.uk",
+      "type": "CNAME",
+      "content": "default-page.cloudflareregistrar.com",
+      "ttl": 1,
+      "proxied": true,
+      "settings": {
+        "flatten_cname": false
+      },
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "dc4be1c42f20ebbd72b073c3ca690a5d",
+      "name": "nddyztlk24dt.lesueur.uk",
+      "type": "CNAME",
+      "content": "gv-v4452g6ywdlkpy.dv.googlehosted.com",
+      "ttl": 3600,
+      "proxied": false,
+      "settings": {
+        "flatten_cname": false
+      },
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "6caa3d978be44a74d0aada2208136ef2",
+      "name": "toolkit.lesueur.uk",
+      "type": "CNAME",
+      "content": "069afa696f9ce94a.vercel-dns-017.com",
+      "ttl": 600,
+      "proxied": false,
+      "settings": {
+        "flatten_cname": false
+      },
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "9bd29044dba7e8fcc5fca30b813a8e33",
+      "name": "lesueur.uk",
+      "type": "MX",
+      "content": "smtp.google.com",
+      "ttl": 1,
+      "proxied": false,
+      "priority": 1,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "295f9d3986e483e055d2940a99cfdadd",
+      "name": "google._domainkey.lesueur.uk",
+      "type": "TXT",
+      "content": "\"v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqO2VUOosmacFyRLb/HlJ8jOkgOO5DKwbSSGYEvcfu/m/RU2Am8m5atPTjPW+nOdhdkVCGwJRuLG7bxh1JyXbBoBd04xU7rpDifYwV9VSdcNOogLfdiOPAan7ZLs9Ugtjg+BBNGPTmDuDrdIS9I6uIkoWWPVCE4N3KZFzaN9kFzfBPBSLJ3hOi4xburqf1QprQpq\" \"bORFeUH9Nwk1nGlN4sqQnrCx+Xg2FlcX5SNcGIPW6E3OKts1i+WtPjLBYfCshGIaeeHUmQqkyYrhIQzG8Dq8XYtjEiFgk355DRim2p1SvsguaEFJhwqA3JkoRz7Ppm33iIskUE4EW1etzmkrmywIDAQAB\"",
+      "ttl": 1,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "ab9ede8756547913d8e9eb7e3d8ab010",
+      "name": "lesueur.uk",
+      "type": "TXT",
+      "content": "\"v=spf1 include:_spf.google.com ~all\"",
+      "ttl": 1,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "1fd515b00e074ee5093858b701af4742",
+      "name": "lesueur.uk",
+      "type": "TXT",
+      "content": "\"google-site-verification=3RZ3Y83T_M0-Eiukdx7mSI0E0G66u7NGo06mVnnWUtg\"",
+      "ttl": 3600,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "baad74ace906248d9dfebbc222028ee1",
+      "name": "_vercel.lesueur.uk",
+      "type": "TXT",
+      "content": "\"vc-domain-verify=artemis2.lesueur.uk,b9cab25443b9de207977,dc\"",
+      "ttl": 600,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    },
+    {
+      "id": "7a8d027026a965ab0566934978cb9d1f",
+      "name": "_vercel.lesueur.uk",
+      "type": "TXT",
+      "content": "\"vc-domain-verify=toolkit.lesueur.uk,486f5f8bdd51c26ee313,dc\"",
+      "ttl": 600,
+      "proxied": false,
+      "settings": {},
+      "comment": null,
+      "tags": []
+    }
+  ],
+  "count": 13,
+  "complete": true
+}
