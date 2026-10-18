@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/react";
+import { SITE_URL, IS_STAGING } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,7 +19,8 @@ export const metadata: Metadata = {
     template: "%s | Space Tracker",
   },
   description: "Real-time 3D visualization of NASA space missions",
-  metadataBase: new URL("https://artemis2.lesueur.uk"),
+  metadataBase: new URL(SITE_URL),
+  robots: { index: !IS_STAGING, follow: !IS_STAGING },
 };
 
 export default function RootLayout({
@@ -32,7 +33,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}<Analytics /></body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

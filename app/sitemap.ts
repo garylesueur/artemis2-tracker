@@ -1,7 +1,6 @@
+import { SITE_URL } from "@/lib/site";
 import type { MetadataRoute } from "next";
 import { getAllMissionIds } from "@/lib/missions";
-
-const SITE_URL = "https://artemis2.lesueur.uk";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const missionEntries = getAllMissionIds().map((id) => ({

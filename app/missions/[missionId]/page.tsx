@@ -1,9 +1,8 @@
+import { SITE_URL } from "@/lib/site";
 import type { Metadata } from "next";
 import { getAllMissionIds, getMission } from "@/lib/missions";
 import { notFound } from "next/navigation";
 import TrackerClient from "./tracker-client";
-
-const SITE_URL = "https://artemis2.lesueur.uk";
 
 export async function generateStaticParams() {
   return getAllMissionIds().map((id) => ({ missionId: id }));

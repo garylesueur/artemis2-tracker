@@ -1,0 +1,93 @@
+{
+  "records": [
+    {
+      "id": "rec_048b01fba03802c5ee1ad046",
+      "name": "2c221e2dc14498a8ab8c9abffdaee81d",
+      "type": "CNAME",
+      "value": "verify.bing.com.",
+      "ttl": 60
+    },
+    {
+      "id": "rec_3d6eaaace9150022f98cf49e",
+      "name": "google._domainkey",
+      "type": "TXT",
+      "value": "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArpk+Mk0vu0qGkwEjzv/cHB0eusAXnsJT7/POr1Mjd2wZtnNEKsfj6DTHI4VNHS4hkoVIDXXj6inCI/fuf6suUvYsaCxcxPcss07GCLbeSpFje6pbVJbdaX5Cr0rDh8x1ucLwcch/BrDBceuA9f9bfp89tcs7oVVMJ/jFpQUJnvjxrjX95sTltk6Wt8Gm6+pUI33SLMPffEMtmw5+VZnfZl5dTHUz2NNRO3vCLLElJJed3WdKzpTK0OdZTTDwCD5urf3/XGuK6mFlOa/xPsgAzJCDDSy34N/152066avXW2Qj2Dyn7HoV/fK1K3NLAXMZtzclaXuZwJZBJ+8MtAYPBwIDAQAB",
+      "ttl": 60,
+      "comment": ""
+    },
+    {
+      "id": "rec_f826c78e3caab3b4ffbed611",
+      "name": "",
+      "type": "MX",
+      "value": "smtp.google.com.",
+      "mxPriority": 1,
+      "ttl": 3600,
+      "comment": "Added from the Google Workspace Email Preset"
+    },
+    {
+      "id": "rec_e832ee1746f0417387f047ec",
+      "name": "",
+      "type": "TXT",
+      "value": "google-site-verification=phTezc9o8hABuedvyiV8aTR1n6gaEIRdwkJjMEWuAB8",
+      "ttl": 60,
+      "comment": ""
+    },
+    {
+      "id": "rec_1b128fdb97bf77373204d351",
+      "name": "",
+      "type": "TXT",
+      "value": "v=spf1 include:_spf.google.com ~all",
+      "ttl": 3600,
+      "comment": "Google Workspace SPF"
+    },
+    {
+      "id": "rec_7822ad708289761ae95a7197",
+      "name": "nodewatch",
+      "type": "CNAME",
+      "value": "garylesueur.github.io.",
+      "ttl": 60
+    },
+    {
+      "id": "rec_6dea10f233038a0908537529",
+      "name": "",
+      "type": "CAA",
+      "value": "0 issue \"pki.goog\"",
+      "ttl": 60
+    },
+    {
+      "id": "rec_0c2af1f2c8c099d2ab45c494",
+      "name": "",
+      "type": "CAA",
+      "value": "0 issue \"sectigo.com\"",
+      "ttl": 60
+    },
+    {
+      "id": "rec_dbdeddc5e60cf33bd52300f7",
+      "name": "",
+      "type": "CAA",
+      "value": "0 issue \"letsencrypt.org\"",
+      "ttl": 60
+    },
+    {
+      "id": "rec_bc2879bb5fcc809d6dd9a292",
+      "name": "*",
+      "type": "ALIAS",
+      "value": "cname.vercel-dns-016.com.",
+      "ttl": 60,
+      "comment": "Vercel automatically manages this record. It may change without notice."
+    },
+    {
+      "id": "rec_d96b829ea4f049002569098f",
+      "name": "",
+      "type": "ALIAS",
+      "value": "d58e54f95fa8cafc.vercel-dns-016.com",
+      "ttl": 60,
+      "comment": "Vercel automatically manages this record. It may change without notice."
+    }
+  ],
+  "pagination": {
+    "count": 11,
+    "next": null,
+    "prev": 1791713128964
+  }
+}
